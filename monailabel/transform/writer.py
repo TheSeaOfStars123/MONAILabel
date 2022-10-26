@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # TODO:: Move to MONAI ??
 def write_itk(image_np, output_file, affine, dtype, compress):
     if len(image_np.shape) > 2:
-        image_np = image_np.transpose().copy()
+        image_np = image_np.numpy().transpose().copy()
     if dtype:
         image_np = image_np.astype(dtype)
 

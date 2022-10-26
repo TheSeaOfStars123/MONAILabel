@@ -17,7 +17,6 @@ import numpy as np
 import skimage.measure as measure
 from monai.config import KeysCollection
 from monai.transforms import MapTransform, Resize, generate_spatial_bounding_box, get_extreme_points
-from monai.transforms.spatial.dictionary import InterpolateModeSequence
 from monai.utils import InterpolateMode, ensure_tuple_rep
 from shapely.geometry import Polygon
 
@@ -92,7 +91,7 @@ class Restored(MapTransform):
         keys: KeysCollection,
         ref_image: str,
         has_channel: bool = True,
-        mode: InterpolateModeSequence = InterpolateMode.NEAREST,
+        mode: str = InterpolateMode.NEAREST,
         align_corners: Union[Sequence[Optional[bool]], Optional[bool]] = None,
         meta_key_postfix: str = "meta_dict",
     ):
