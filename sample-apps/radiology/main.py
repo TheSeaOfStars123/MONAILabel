@@ -276,6 +276,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # export PYTHONPATH=~/Projects/MONAILabel:`pwd`
+    # export PYTHONPATH=D:\Desktop\MONAILabel0.4
     # python main.py
     main()
