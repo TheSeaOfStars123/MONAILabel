@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import copy
 import logging
 import os
@@ -17,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from monai.apps.deepedit.transforms import DiscardAddGuidanced
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import Dataset
 from monai.data.utils import list_data_collate, pad_list_data_collate
@@ -37,16 +39,17 @@ from monai.transforms.inverse import InvertibleTransform
 from monai.transforms.inverse_batch_transform import BatchInverseTransform
 from monai.transforms.transform import Randomizable
 from monai.transforms.utils import allow_missing_keys_mode
+from monai.utils import deprecated
 from monai.utils.enums import CommonKeys, InverseKeys
 from tqdm import tqdm
 
-from monailabel.deepedit.transforms import DiscardAddGuidanced
 from monailabel.interfaces.datastore import Datastore
 from monailabel.interfaces.tasks.scoring import ScoringMethod
 
 logger = logging.getLogger(__name__)
 
 
+@deprecated(since="0.5.0", msg_suffix="please use Epistemic based strategy instead")
 class TTAScoring(ScoringMethod):
     """
     First version of test time augmentation active learning
@@ -80,7 +83,6 @@ class TTAScoring(ScoringMethod):
                 prob=1,
                 rotate_range=(np.pi / 4, np.pi / 4, np.pi / 4),
                 padding_mode="zeros",
-                as_tensor_output=False,
             ),
             RandFlipd(keys="image", prob=0.5, spatial_axis=0),
             RandRotated(keys="image", range_x=(-5, 5), range_y=(-5, 5), range_z=(-5, 5)),
@@ -96,7 +98,7 @@ class TTAScoring(ScoringMethod):
         return Compose(
             [
                 Activations(sigmoid=True),
-                AsDiscrete(threshold_values=True),
+                AsDiscrete(),
             ]
         )
 
@@ -236,7 +238,7 @@ class TestTimeAugmentation:
         .. code-block:: python
 
             transform = RandAffined(keys, ...)
-            post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+            post_trans = Compose([Activations(sigmoid=True), AsDiscrete()])
 
             tt_aug = TestTimeAugmentation(
                 transform, batch_size=5, num_workers=0, inferrer_fn=lambda x: post_trans(model(x)), device=device

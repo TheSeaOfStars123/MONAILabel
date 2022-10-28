@@ -17,6 +17,7 @@ import torch
 from monai.transforms import LoadImage
 from monai.utils import set_determinism
 from parameterized import parameterized
+from torch.utils.cpp_extension import CUDA_HOME
 
 from monailabel.scribbles.infer import HistogramBasedGraphCut
 from monailabel.scribbles.transforms import (
@@ -260,38 +261,50 @@ TEST_CASE_HISTOGRAM_GRAPHCUT = [
 ]
 
 
+def add_scribbles_from_roi(scribbles, roi, scribbles_fg_label, scribbles_bg_label):
+    mask = scribbles.astype(bool)
+    mask[
+        :,
+        roi[0] : roi[1],
+        roi[2] : roi[3],
+        roi[4] : roi[5],
+    ] = True
+    scribbles[~mask] = scribbles_bg_label
+    if not np.any(scribbles == scribbles_fg_label):
+        offset = 5
+
+        cx = int((roi[0] + roi[1]) / 2)
+        cy = int((roi[2] + roi[3]) / 2)
+        cz = int((roi[4] + roi[5]) / 2)
+
+        # add scribbles at center of roi
+        scribbles[
+            :, cx - offset : cx + offset, cy - offset : cy + offset, cz - offset : cz + offset
+        ] = scribbles_fg_label
+
+    return scribbles
+
+
 class TestScribblesTransforms(unittest.TestCase):
     @parameterized.expand(TEST_CASE_ADD_BG_ROI)
     def test_add_bg_roi_transform(self, input_param, test_input, expected_shape):
         # float32 test
         result = AddBackgroundScribblesFromROId(**input_param)(test_input)
         input_data = test_input["scribbles"].copy()
-        mask = input_data.astype(bool)
-        mask[
-            :,
-            test_input["roi"][0] : test_input["roi"][1],
-            test_input["roi"][2] : test_input["roi"][3],
-            test_input["roi"][4] : test_input["roi"][5],
-        ] = True
-        input_data[~mask] = input_param["scribbles_bg_label"]
-
+        input_data = add_scribbles_from_roi(
+            input_data, test_input["roi"], input_param["scribbles_fg_label"], input_param["scribbles_bg_label"]
+        )
         np.testing.assert_equal(input_data, result["scribbles"])
         self.assertTupleEqual(expected_shape, result["scribbles"].shape)
         self.assertTupleEqual(test_input["scribbles"].shape, result["scribbles"].shape)
 
         # int32 test
-        test_input["scribbles"] = test_input["scribbles"].astype(np.int)
+        test_input["scribbles"] = test_input["scribbles"].astype(np.int32)
         result = AddBackgroundScribblesFromROId(**input_param)(test_input)
         input_data = test_input["scribbles"].copy()
-        mask = input_data.astype(bool)
-        mask[
-            :,
-            test_input["roi"][0] : test_input["roi"][1],
-            test_input["roi"][2] : test_input["roi"][3],
-            test_input["roi"][4] : test_input["roi"][5],
-        ] = True
-        input_data[~mask] = input_param["scribbles_bg_label"]
-
+        input_data = add_scribbles_from_roi(
+            input_data, test_input["roi"], input_param["scribbles_fg_label"], input_param["scribbles_bg_label"]
+        )
         np.testing.assert_equal(input_data, result["scribbles"])
         self.assertTupleEqual(expected_shape, result["scribbles"].shape)
         self.assertTupleEqual(test_input["scribbles"].shape, result["scribbles"].shape)
@@ -343,8 +356,8 @@ class TestScribblesTransforms(unittest.TestCase):
         self.assertTupleEqual(expected_shape, result["pred"].shape)
 
     @parameterized.expand(TEST_CASE_MAKE_LIKE_METHOD_TX)
-    @unittest.skipUnless(torch.cuda.is_available(), "Skipping CUDA-based tests")
-    def test_make_likelihood_GMM(self, input_param, test_input, output, expected_shape):
+    @unittest.skipUnless(torch.cuda.is_available() and CUDA_HOME is not None, "Skipping CUDA-based tests")
+    def test_make_likelihood_gmm(self, input_param, test_input, output, expected_shape):
         input_param.update({"post_proc_label": "pred"})
         result = MakeLikelihoodFromScribblesGMMd(**input_param)(test_input)
 

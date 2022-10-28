@@ -26,7 +26,9 @@ from monailabel.endpoints import (
     datastore,
     infer,
     info,
+    login,
     logs,
+    model,
     ohif,
     proxy,
     scoring,
@@ -36,6 +38,9 @@ from monailabel.endpoints import (
 )
 from monailabel.interfaces.utils.app import app_instance, clear_cache
 
+origins = [str(origin) for origin in settings.MONAI_LABEL_CORS_ORIGINS] if settings.MONAI_LABEL_CORS_ORIGINS else ["*"]
+print(f"Allow Origins: {origins}")
+
 app = FastAPI(
     title=settings.MONAI_LABEL_PROJECT_NAME,
     openapi_url="/openapi.json",
@@ -44,9 +49,7 @@ app = FastAPI(
     middleware=[
         Middleware(
             CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.MONAI_LABEL_CORS_ORIGINS]
-            if settings.MONAI_LABEL_CORS_ORIGINS
-            else ["*"],
+            allow_origins=origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -62,7 +65,9 @@ app.mount(
     name="static",
 )
 
+app.include_router(login.router, prefix=settings.MONAI_LABEL_API_STR)
 app.include_router(info.router, prefix=settings.MONAI_LABEL_API_STR)
+app.include_router(model.router, prefix=settings.MONAI_LABEL_API_STR)
 app.include_router(infer.router, prefix=settings.MONAI_LABEL_API_STR)
 app.include_router(wsi_infer.router, prefix=settings.MONAI_LABEL_API_STR)
 app.include_router(batch_infer.router, prefix=settings.MONAI_LABEL_API_STR)

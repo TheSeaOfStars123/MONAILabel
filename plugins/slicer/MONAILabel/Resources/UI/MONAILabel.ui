@@ -82,12 +82,15 @@
       </widget>
      </item>
      <item row="2" column="1">
-      <widget class="QComboBox" name="inputSelector">
+      <widget class="ctkComboBox" name="inputSelector">
        <property name="currentText">
         <string/>
        </property>
        <property name="placeholderText">
         <string>Select Node</string>
+       </property>
+       <property name="elideMode">
+        <enum>Qt::ElideMiddle</enum>
        </property>
       </widget>
      </item>
@@ -124,7 +127,7 @@
       <property name="rightMargin">
        <number>0</number>
       </property>
-      <item row="0" column="0">
+      <item row="2" column="0">
        <widget class="QTableWidget" name="configTable">
         <property name="autoFillBackground">
          <bool>true</bool>
@@ -133,7 +136,7 @@
          <bool>true</bool>
         </property>
         <property name="columnCount">
-         <number>3</number>
+         <number>2</number>
         </property>
         <attribute name="horizontalHeaderStretchLastSection">
          <bool>true</bool>
@@ -145,6 +148,37 @@
         <column/>
         <column/>
        </widget>
+      </item>
+      <item row="1" column="0">
+       <layout class="QGridLayout" name="gridLayout_6">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_14">
+          <property name="text">
+           <string>Section:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="optionsSection">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label_15">
+          <property name="text">
+           <string>Name:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QComboBox" name="optionsName"/>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -645,6 +679,30 @@
         <item row="2" column="3">
          <widget class="QComboBox" name="scribLabelComboBox"/>
         </item>
+        <item row="0" column="6">
+         <layout class="QHBoxLayout" name="horizontalLayout_4">
+          <item>
+           <widget class="QLabel" name="scribblesROILabel">
+            <property name="text">
+             <string>ROI:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="qSlicerMarkupsPlaceWidget" name="scribblesPlaceWidget">
+            <property name="placeMultipleMarkups">
+             <enum>qSlicerMarkupsPlaceWidget::ForcePlaceSingleMarkup</enum>
+            </property>
+            <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+              </sizepolicy>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
        </layout>
       </item>
      </layout>
@@ -709,6 +767,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkComboBox</class>
+   <extends>QComboBox</extends>
+   <header>ctkComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>ctkPathLineEdit</class>

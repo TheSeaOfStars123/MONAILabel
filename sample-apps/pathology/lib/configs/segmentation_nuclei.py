@@ -8,11 +8,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import json
 import logging
 import multiprocessing
 import os
-from distutils.util import strtobool
 from typing import Any, Dict, Optional, Union
 
 import lib.infers
@@ -20,9 +20,9 @@ import lib.trainers
 from monai.networks.nets import BasicUNet
 
 from monailabel.interfaces.config import TaskConfig
-from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferTask
 from monailabel.interfaces.tasks.train import TrainTask
-from monailabel.utils.others.generic import download_file
+from monailabel.utils.others.generic import download_file, strtobool
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class SegmentationNuclei(TaskConfig):
 
     def infer(self) -> Union[InferTask, Dict[str, InferTask]]:
         preload = strtobool(self.conf.get("preload", "false"))
-        roi_size = json.loads(self.conf.get("roi_size", "[512, 512]"))
+        roi_size = json.loads(self.conf.get("roi_size", "[1024, 1024]"))
         logger.info(f"Using Preload: {preload}; ROI Size: {roi_size}")
 
         task: InferTask = lib.infers.SegmentationNuclei(
@@ -86,10 +86,12 @@ class SegmentationNuclei(TaskConfig):
 
     def trainer(self) -> Optional[TrainTask]:
         output_dir = os.path.join(self.model_dir, self.name)
+        load_path = self.path[0] if os.path.exists(self.path[0]) else self.path[1]
+
         task: TrainTask = lib.trainers.SegmentationNuclei(
             model_dir=output_dir,
             network=self.network,
-            load_path=self.path[0],
+            load_path=load_path,
             publish_path=self.path[1],
             labels=self.labels,
             description="Train Nuclei Segmentation Model",

@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import Callable, Sequence, Union
 
 from monai.apps.deepedit.transforms import (
@@ -30,11 +31,12 @@ from monai.transforms import (
     ToNumpyd,
 )
 
-from monailabel.interfaces.tasks.infer import InferTask, InferType
+from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import Restored
 
 
-class DeepEdit(InferTask):
+class DeepEdit(BasicInferTask):
     """
     This provides Inference Engine for pre-trained model over Multi Atlas Labeling Beyond The Cranial Vault (BTCV)
     dataset.
@@ -51,6 +53,7 @@ class DeepEdit(InferTask):
         target_spacing=(1.0, 1.0, 1.0),
         number_intensity_ch=1,
         description="A DeepEdit model for volumetric (3D) segmentation over 3D Images",
+        **kwargs,
     ):
         super().__init__(
             path=path,
@@ -62,6 +65,7 @@ class DeepEdit(InferTask):
             input_key="image",
             output_label_key="pred",
             output_json_key="result",
+            **kwargs,
         )
 
         self.spatial_size = spatial_size
@@ -75,6 +79,9 @@ class DeepEdit(InferTask):
             Orientationd(keys="image", axcodes="RAS"),
             ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
         ]
+
+        self.add_cache_transform(t, data)
+
         if self.type == InferType.DEEPEDIT:
             t.extend(
                 [

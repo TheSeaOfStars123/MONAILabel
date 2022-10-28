@@ -8,9 +8,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 import os
-from distutils.util import strtobool
 from typing import Any, Dict, Optional, Union
 
 import lib.infers
@@ -18,7 +18,7 @@ import lib.trainers
 from monai.networks.nets import UNet
 
 from monailabel.interfaces.config import TaskConfig
-from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferTask
 from monailabel.interfaces.tasks.scoring import ScoringMethod
 from monailabel.interfaces.tasks.strategy import Strategy
 from monailabel.interfaces.tasks.train import TrainTask
@@ -28,7 +28,7 @@ from monailabel.tasks.scoring.dice import Dice
 from monailabel.tasks.scoring.epistemic import EpistemicScoring
 from monailabel.tasks.scoring.sum import Sum
 from monailabel.tasks.scoring.tta import TTAScoring
-from monailabel.utils.others.generic import download_file
+from monailabel.utils.others.generic import download_file, strtobool
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,9 @@ class SegmentationSpleen(TaskConfig):
         super().init(name, model_dir, conf, planner, **kwargs)
 
         # Labels
-        self.labels = ["spleen"]
+        self.labels = {
+            "spleen": 1,
+        }
 
         # Model Files
         self.path = [
@@ -81,17 +83,22 @@ class SegmentationSpleen(TaskConfig):
 
     def infer(self) -> Union[InferTask, Dict[str, InferTask]]:
         task: InferTask = lib.infers.SegmentationSpleen(
-            path=self.path, network=self.network, labels=self.labels, preload=False
+            path=self.path,
+            network=self.network,
+            labels=self.labels,
+            preload=strtobool(self.conf.get("preload", "false")),
         )
         return task
 
     def trainer(self) -> Optional[TrainTask]:
         output_dir = os.path.join(self.model_dir, self.name)
+        load_path = self.path[0] if os.path.exists(self.path[0]) else self.path[1]
+
         task: TrainTask = lib.trainers.SegmentationSpleen(
             model_dir=output_dir,
             network=self.network,
             description="Train Spleen Segmentation Model",
-            load_path=self.path[0],
+            load_path=load_path,
             publish_path=self.path[1],
             labels=self.labels,
         )

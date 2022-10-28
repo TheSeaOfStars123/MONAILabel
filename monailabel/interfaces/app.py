@@ -20,33 +20,36 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-from distutils.util import strtobool
 from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import requests
 import schedule
 import torch
+from dicomweb_client import DICOMwebClient
+
+# added to support connecting to DICOM Store Google Cloud
+from dicomweb_client.ext.gcp.session_utils import create_session_from_gcp_credentials
 from dicomweb_client.session_utils import create_session_from_user_pass
-from monai.apps import download_and_extract, download_url, load_from_mmar
+from monai.apps import download_and_extract, download_url
 from monai.data import partition_dataset
 from timeloop import Timeloop
 
 from monailabel.config import settings
 from monailabel.datastore.dicom import DICOMwebClientX, DICOMWebDatastore
+from monailabel.datastore.dsa import DSADatastore
 from monailabel.datastore.local import LocalDatastore
+from monailabel.datastore.xnat import XNATDatastore
 from monailabel.interfaces.datastore import Datastore, DefaultLabelTag
 from monailabel.interfaces.exception import MONAILabelError, MONAILabelException
 from monailabel.interfaces.tasks.batch_infer import BatchInferImageType, BatchInferTask
-from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferTask
 from monailabel.interfaces.tasks.scoring import ScoringMethod
 from monailabel.interfaces.tasks.strategy import Strategy
 from monailabel.interfaces.tasks.train import TrainTask
 from monailabel.interfaces.utils.wsi import create_infer_wsi_tasks
 from monailabel.tasks.activelearning.random import Random
-from monailabel.tasks.infer.deepgrow_2d import InferDeepgrow2D
-from monailabel.tasks.infer.deepgrow_3d import InferDeepgrow3D
-from monailabel.tasks.infer.deepgrow_pipeline import InferDeepgrowPipeline
 from monailabel.utils.async_tasks.task import AsyncTask
+from monailabel.utils.others.generic import file_checksum, is_openslide_supported, strtobool
 from monailabel.utils.others.pathology import create_asap_annotations_xml, create_dsa_annotations_json
 from monailabel.utils.sessions import Sessions
 
@@ -105,7 +108,7 @@ class MONAILabelApp:
         )
 
         # control call back requests
-        self._server_mode = strtobool(conf.get("server_mode", "false"))
+        self._server_mode = bool(strtobool(conf.get("server_mode", "false")))
 
     def init_infers(self) -> Dict[str, InferTask]:
         return {}
@@ -132,33 +135,72 @@ class MONAILabelApp:
             self.studies,
             extensions=settings.MONAI_LABEL_DATASTORE_FILE_EXT,
             auto_reload=settings.MONAI_LABEL_DATASTORE_AUTO_RELOAD,
+            read_only=settings.MONAI_LABEL_DATASTORE_READ_ONLY,
         )
 
     def init_remote_datastore(self) -> Datastore:
-        logger.info(f"Using DICOM WEB: {self.studies}")
-        dw_session = None
-        if settings.MONAI_LABEL_DICOMWEB_USERNAME and settings.MONAI_LABEL_DICOMWEB_PASSWORD:
-            dw_session = create_session_from_user_pass(
-                settings.MONAI_LABEL_DICOMWEB_USERNAME, settings.MONAI_LABEL_DICOMWEB_PASSWORD
-            )
+        if settings.MONAI_LABEL_DATASTORE.lower() == "xnat":
+            return self._init_xnat_datastore()
+        if settings.MONAI_LABEL_DATASTORE.lower() == "dsa":
+            return self._init_dsa_datastore()
 
-        dw_client = DICOMwebClientX(
-            url=self.studies,
-            session=dw_session,
-            qido_url_prefix=settings.MONAI_LABEL_QIDO_PREFIX,
-            wado_url_prefix=settings.MONAI_LABEL_WADO_PREFIX,
-            stow_url_prefix=settings.MONAI_LABEL_STOW_PREFIX,
-        )
+        return self._init_dicomweb_datastore()
+
+    def _init_dicomweb_datastore(self) -> Datastore:
+        logger.info(f"Using DICOM WEB: {self.studies}")
+
+        dw_session = None
+        if "googleapis.com" in self.studies:
+            logger.info("Creating DICOM Credentials for Google Cloud")
+            dw_session = create_session_from_gcp_credentials()
+            dw_client = DICOMwebClient(url=self.studies, session=dw_session)
+        else:
+            if settings.MONAI_LABEL_DICOMWEB_USERNAME and settings.MONAI_LABEL_DICOMWEB_PASSWORD:
+                dw_session = create_session_from_user_pass(
+                    settings.MONAI_LABEL_DICOMWEB_USERNAME, settings.MONAI_LABEL_DICOMWEB_PASSWORD
+                )
+            dw_client = DICOMwebClientX(
+                url=self.studies,
+                session=dw_session,
+                qido_url_prefix=settings.MONAI_LABEL_QIDO_PREFIX,
+                wado_url_prefix=settings.MONAI_LABEL_WADO_PREFIX,
+                stow_url_prefix=settings.MONAI_LABEL_STOW_PREFIX,
+            )
 
         self._download_dcmqi_tools()
 
         cache_path = settings.MONAI_LABEL_DICOMWEB_CACHE_PATH
         cache_path = cache_path.strip() if cache_path else ""
         fetch_by_frame = settings.MONAI_LABEL_DICOMWEB_FETCH_BY_FRAME
-        return (
-            DICOMWebDatastore(dw_client, cache_path, fetch_by_frame=fetch_by_frame)
-            if cache_path
-            else DICOMWebDatastore(dw_client, fetch_by_frame=fetch_by_frame)
+        search_filter = settings.MONAI_LABEL_DICOMWEB_SEARCH_FILTER
+        convert_to_nifti = settings.MONAI_LABEL_DICOMWEB_CONVERT_TO_NIFTI
+        return DICOMWebDatastore(
+            client=dw_client,
+            search_filter=search_filter,
+            cache_path=cache_path if cache_path else None,
+            fetch_by_frame=fetch_by_frame,
+            convert_to_nifti=convert_to_nifti,
+        )
+
+    def _init_dsa_datastore(self) -> Datastore:
+        logger.info(f"Using DSA: {self.studies}")
+        return DSADatastore(
+            api_url=self.studies,
+            api_key=settings.MONAI_LABEL_DATASTORE_API_KEY,
+            folder=settings.MONAI_LABEL_DATASTORE_PROJECT,
+            annotation_groups=settings.MONAI_LABEL_DATASTORE_DSA_ANNOTATION_GROUPS,
+            asset_store_path=settings.MONAI_LABEL_DATASTORE_ASSET_PATH,
+        )
+
+    def _init_xnat_datastore(self) -> Datastore:
+        logger.info(f"Using XNAT: {self.studies}")
+        return XNATDatastore(
+            api_url=self.studies,
+            username=settings.MONAI_LABEL_DATASTORE_USERNAME,
+            password=settings.MONAI_LABEL_DATASTORE_PASSWORD,
+            project=settings.MONAI_LABEL_DATASTORE_PROJECT,
+            asset_path=settings.MONAI_LABEL_DATASTORE_ASSET_PATH,
+            cache_path=settings.MONAI_LABEL_DATASTORE_CACHE_PATH,
         )
 
     def info(self):
@@ -242,8 +284,6 @@ class MONAILabelApp:
 
             if os.path.isdir(request["image"]):
                 logger.info("Input is a Directory; Consider it as DICOM")
-                logger.info(os.listdir(request["image"]))
-                request["image"] = [os.path.join(f, request["image"]) for f in os.listdir(request["image"])]
 
             logger.debug(f"Image => {request['image']}")
         else:
@@ -264,7 +304,9 @@ class MONAILabelApp:
             tag = request.get("label_tag", DefaultLabelTag.ORIGINAL)
             save_label = request.get("save_label", False)
             if save_label:
-                label_id = datastore.save_label(image_id, result_file_name, tag, dict())
+                label_id = datastore.save_label(
+                    image_id, result_file_name, tag, {"model": model, "params": result_json}
+                )
             else:
                 label_id = result_file_name
 
@@ -410,20 +452,17 @@ class MONAILabelApp:
                 f"ActiveLearning Task is not Initialized. There is no such strategy '{strategy}' available",
             )
 
-        image_id = task(request, self.datastore())
-        if not image_id:
+        res = task(request, self.datastore())
+        if not res or not res.get("id"):
             return {}
 
-        image_path = self._datastore.get_image_uri(image_id)
+        res["path"] = self._datastore.get_image_uri(res["id"])
 
         # Run all scoring methods
         if self._auto_update_scoring:
             self.async_scoring(None)
 
-        return {
-            "id": image_id,
-            "path": image_path,
-        }
+        return res
 
     def on_init_complete(self):
         logger.info("App Init - completed")
@@ -481,8 +520,8 @@ class MONAILabelApp:
         if not model and not self._trainers:
             return {}
 
-        models = [model] if model else list(self._trainers.keys())
-        enqueue = True if model > 1 else enqueue
+        models = list(self._trainers.keys()) if not model else [model] if isinstance(model, str) else model
+        enqueue = True if len(models) > 1 else enqueue
         result = {}
         for m in models:
             if self._server_mode:
@@ -491,10 +530,10 @@ class MONAILabelApp:
                 res, _ = AsyncTask.run("train", request=request, params=params, enqueue=enqueue)
                 result[m] = res
             else:
-                url = f"/train/{model}?enqueue={enqueue}"
+                url = f"/train/{m}?enqueue={enqueue}"
                 p = params[m] if params and params.get(m) else None
                 result[m] = self._local_request(url, p, "Training")
-        return result[model] if model else result
+        return result[models[0]] if len(models) == 1 else result
 
     def async_batch_infer(self, model, images: BatchInferImageType, params=None):
         if self._server_mode:
@@ -517,7 +556,7 @@ class MONAILabelApp:
         target = os.path.join(self.app_dir, "bin")
         os.makedirs(target, exist_ok=True)
 
-        dcmqi_tools = ["segimage2itkimage", "itkimage2segimage", "segimage2itkimage.exe", "itkimage2segimage.exe"]
+        dcmqi_tools = ["itkimage2segimage", "itkimage2segimage.exe"]
         existing = [tool for tool in dcmqi_tools if shutil.which(tool) or os.path.exists(os.path.join(target, tool))]
         logger.debug(f"Existing Tools: {existing}")
 
@@ -561,27 +600,6 @@ class MONAILabelApp:
                 download_url(resource[1], resource[0])
                 time.sleep(1)
 
-    @staticmethod
-    def deepgrow_infer_tasks(model_dir, pipeline=True):
-        """
-        Dictionary of Default Infer Tasks for Deepgrow 2D/3D
-        """
-        deepgrow_2d = load_from_mmar("clara_pt_deepgrow_2d_annotation", model_dir)
-        deepgrow_3d = load_from_mmar("clara_pt_deepgrow_3d_annotation", model_dir)
-
-        infers = {
-            "deepgrow_2d": InferDeepgrow2D(None, deepgrow_2d),
-            "deepgrow_3d": InferDeepgrow3D(None, deepgrow_3d),
-        }
-        if pipeline:
-            infers["deepgrow_pipeline"] = InferDeepgrowPipeline(
-                path=None,
-                network=deepgrow_2d,
-                model_3d=infers["deepgrow_3d"],
-                description="Combines Deepgrow 2D model and 3D deepgrow model",
-            )
-        return infers
-
     def infer_wsi(self, request, datastore=None):
         model = request.get("model")
         if not model:
@@ -617,11 +635,20 @@ class MONAILabelApp:
         # Possibly region (e.g. DSA)
         if not os.path.exists(image):
             image = datastore.get_image(img_id, request)
+            if isinstance(datastore, DSADatastore):
+                request["annotations"] = datastore.get_annotations_by_image_id(img_id)
+
             if not isinstance(image, str):
                 request["image"] = image
                 res = self.infer(request, datastore)
                 logger.info(f"Latencies: {res.get('params', {}).get('latencies')}")
                 return res
+
+        # simple image
+        if not is_openslide_supported(image):
+            res = self.infer(request, datastore)
+            logger.info(f"Latencies: {res.get('params', {}).get('latencies')}")
+            return res
 
         start = time.time()
         infer_tasks = create_infer_wsi_tasks(request, image)
@@ -686,7 +713,14 @@ class MONAILabelApp:
         res_json["model"] = request.get("model")
         res_json["location"] = request.get("location")
         res_json["size"] = request.get("size")
-        res_json["latencies"] = {"total": round(latency_total, 2)}
+
+        res_json["latencies"] = {
+            "total": round(latency_total, 2),
+            "tsum": round(sum(a["latencies"]["total"] for a in res_json["annotations"]) / max(1, max_workers), 2),
+            "pre": round(sum(a["latencies"]["pre"] for a in res_json["annotations"]) / max(1, max_workers), 2),
+            "post": round(sum(a["latencies"]["post"] for a in res_json["annotations"]) / max(1, max_workers), 2),
+            "infer": round(sum(a["latencies"]["infer"] for a in res_json["annotations"]) / max(1, max_workers), 2),
+        }
 
         res_file = None
         output = request.get("output", "dsa")
@@ -706,8 +740,9 @@ class MONAILabelApp:
         if len(infer_tasks) > 1:
             logger.info(
                 f"Total Time Taken: {time.time() - start:.4f}; "
-                f"Total Infer Time: {latency_total:.4f}; "
-                f"Total Annotations: {total_annotations}"
+                f"Total WSI Infer Time: {latency_total:.4f}; "
+                f"Total Annotations: {total_annotations}; "
+                f"Latencies: {res_json['latencies']}"
             )
         return {"file": res_file, "params": res_json}
 
@@ -717,3 +752,22 @@ class MONAILabelApp:
 
         res = self.infer(req)
         return res.get("params", {})
+
+    def model_file(self, model):
+        task = self._infers.get(model)
+        return task.get_path() if task else None
+
+    def model_info(self, model):
+        file = self.model_file(model)
+        if not file or not os.path.exists(file):
+            return None
+
+        s = os.stat(file)
+        checksum = file_checksum(file)
+
+        info = {"checksum": checksum, "modified_time": int(s.st_mtime)}
+        task = self._trainers.get(model)
+        train_stats = task.stats() if task else None
+        if train_stats:
+            info["train_stats"] = train_stats
+        return info

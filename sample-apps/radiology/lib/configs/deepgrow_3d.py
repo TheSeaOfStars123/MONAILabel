@@ -11,7 +11,6 @@
 
 import logging
 import os
-from distutils.util import strtobool
 from typing import Any, Dict, Optional, Union
 
 import lib.infers
@@ -19,9 +18,9 @@ import lib.trainers
 from monai.networks.nets import BasicUNet
 
 from monailabel.interfaces.config import TaskConfig
-from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferTask
 from monailabel.interfaces.tasks.train import TrainTask
-from monailabel.utils.others.generic import download_file
+from monailabel.utils.others.generic import download_file, strtobool
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +34,10 @@ class Deepgrow3D(TaskConfig):
             "spleen",
             "right kidney",
             "left kidney",
-            "gallbladder",
-            "esophagus",
             "liver",
             "stomach",
             "aorta",
             "inferior vena cava",
-            "portal vein and splenic vein",
-            "pancreas",
-            "right adrenal gland",
-            "left adrenal gland",
         ]
 
         # Model Files
@@ -71,17 +64,21 @@ class Deepgrow3D(TaskConfig):
             path=self.path,
             network=self.network,
             labels=self.labels,
+            preload=strtobool(self.conf.get("preload", "false")),
             dimension=3,
             model_size=(128, 192, 192),
+            config={"cache_transforms": True, "cache_transforms_in_memory": True, "cache_transforms_ttl": 300},
         )
         return task
 
     def trainer(self) -> Optional[TrainTask]:
         output_dir = os.path.join(self.model_dir, self.name)
+        load_path = self.path[0] if os.path.exists(self.path[0]) else self.path[1]
+
         task: TrainTask = lib.trainers.Deepgrow(
             model_dir=output_dir,
             network=self.network,
-            load_path=self.path[0],
+            load_path=load_path,
             publish_path=self.path[1],
             description="Train 3D Deepgrow model",
             dimension=3,

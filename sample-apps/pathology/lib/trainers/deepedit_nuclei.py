@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 import os
 
@@ -17,6 +18,7 @@ from ignite.metrics import Accuracy
 from lib.handlers import TensorBoardImageHandler
 from lib.transforms import AddInitialSeedPointExd, FilterImaged
 from lib.utils import split_dataset
+from monai.apps.deepedit.interaction import Interaction
 from monai.apps.deepgrow.transforms import AddGuidanceSignald, AddRandomGuidanced, FindDiscrepancyRegionsd
 from monai.handlers import from_engine
 from monai.inferers import SimpleInferer
@@ -35,7 +37,6 @@ from monai.transforms import (
     ToTensord,
 )
 
-from monailabel.deepedit.interaction import Interaction
 from monailabel.interfaces.datastore import Datastore
 from monailabel.tasks.train.basic_train import BasicTrainTask, Context
 
@@ -49,16 +50,12 @@ class DeepEditNuclei(BasicTrainTask):
         network,
         labels,
         roi_size=(256, 256),
-        max_train_interactions=10,
-        max_val_interactions=5,
         description="Pathology DeepEdit Segmentation",
         **kwargs,
     ):
         self._network = network
         self.labels = labels
         self.roi_size = roi_size
-        self.max_train_interactions = max_train_interactions
-        self.max_val_interactions = max_val_interactions
         super().__init__(model_dir, description, **kwargs)
 
     def network(self, context: Context):
@@ -120,7 +117,7 @@ class DeepEditNuclei(BasicTrainTask):
     def train_post_transforms(self, context: Context):
         return [
             Activationsd(keys="pred", sigmoid=True),
-            AsDiscreted(keys="pred", threshold_values=True, logit_thresh=0.5),
+            AsDiscreted(keys="pred", threshold=0.5),
         ]
 
     def train_key_metric(self, context: Context):
@@ -142,14 +139,14 @@ class DeepEditNuclei(BasicTrainTask):
         return Interaction(
             deepgrow_probability=0.5,
             transforms=self.get_click_transforms(context),
-            max_interactions=self.max_train_interactions,
             train=True,
+            label_names={},
         )
 
     def val_iteration_update(self, context: Context):
         return Interaction(
             deepgrow_probability=1.0,
             transforms=self.get_click_transforms(context),
-            max_interactions=self.max_val_interactions,
             train=False,
+            label_names={},
         )

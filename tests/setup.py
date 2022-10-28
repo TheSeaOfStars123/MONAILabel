@@ -10,19 +10,37 @@
 # limitations under the License.
 
 import os
+import shutil
 
 from monai.apps import download_url, extractall
 
-TEST_DATA = os.path.join(os.path.realpath(os.path.dirname(__file__)), "data")
+TEST_DIR = os.path.realpath(os.path.dirname(__file__))
+TEST_DATA = os.path.join(TEST_DIR, "data")
 
 
 def run_main():
-    dataset_file = os.path.join(TEST_DATA, "dataset.zip")
+    downloaded_dataset_file = os.path.join(TEST_DIR, "downloads", "dataset.zip")
     dataset_url = "https://github.com/Project-MONAI/MONAILabel/releases/download/data/test_dataset.zip"
+    if not os.path.exists(downloaded_dataset_file):
+        download_url(url=dataset_url, filepath=downloaded_dataset_file)
     if not os.path.exists(os.path.join(TEST_DATA, "dataset")):
-        if not os.path.exists(dataset_file):
-            download_url(url=dataset_url, filepath=dataset_file)
-        extractall(filepath=dataset_file, output_dir=TEST_DATA)
+        extractall(filepath=downloaded_dataset_file, output_dir=TEST_DATA)
+
+    downloaded_pathology_file = os.path.join(TEST_DIR, "downloads", "JP2K-33003-1.svs")
+    pathology_url = "https://demo.kitware.com/histomicstk/api/v1/item/5d5c07509114c049342b66f8/download"
+    if not os.path.exists(downloaded_pathology_file):
+        download_url(url=pathology_url, filepath=downloaded_pathology_file)
+    if not os.path.exists(os.path.join(TEST_DATA, "pathology")):
+        os.makedirs(os.path.join(TEST_DATA, "pathology"))
+        shutil.copy(downloaded_pathology_file, os.path.join(TEST_DATA, "pathology"))
+
+    downloaded_endoscopy_file = os.path.join(TEST_DIR, "downloads", "endoscopy_frames.zip")
+    endoscopy_url = "https://github.com/Project-MONAI/MONAILabel/releases/download/data/endoscopy_frames.zip"
+    if not os.path.exists(downloaded_endoscopy_file):
+        download_url(url=endoscopy_url, filepath=downloaded_endoscopy_file)
+    if not os.path.exists(os.path.join(TEST_DATA, "endoscopy")):
+        os.makedirs(os.path.join(TEST_DATA, "endoscopy"))
+        extractall(filepath=downloaded_endoscopy_file, output_dir=os.path.join(TEST_DATA, "endoscopy"))
 
 
 if __name__ == "__main__":

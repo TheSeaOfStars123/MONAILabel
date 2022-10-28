@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import Callable, Sequence
 
 from monai.inferers import Inferer, SlidingWindowInferer
@@ -19,14 +20,14 @@ from monai.transforms import (
     LoadImaged,
     ScaleIntensityRanged,
     Spacingd,
-    ToNumpyd,
 )
 
-from monailabel.interfaces.tasks.infer import InferTask, InferType
-from monailabel.transform.post import BoundingBoxd, Restored
+from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.tasks.infer.basic_infer import BasicInferTask
+from monailabel.transform.post import Restored
 
 
-class SegmentationSpleen(InferTask):
+class SegmentationSpleen(BasicInferTask):
     """
     This provides Inference Engine for pre-trained spleen segmentation (UNet) model over MSD Dataset.
     """
@@ -36,7 +37,7 @@ class SegmentationSpleen(InferTask):
         path,
         network=None,
         type=InferType.SEGMENTATION,
-        labels="spleen",
+        labels=None,
         dimension=3,
         description="A pre-trained model for volumetric (3D) segmentation of the spleen from CT image",
         **kwargs,
@@ -54,10 +55,10 @@ class SegmentationSpleen(InferTask):
     def pre_transforms(self, data=None) -> Sequence[Callable]:
         return [
             LoadImaged(keys="image"),
+            EnsureTyped(keys="image", device=data.get("device") if data else None),
             EnsureChannelFirstd(keys="image"),
             Spacingd(keys="image", pixdim=[1.0, 1.0, 1.0]),
             ScaleIntensityRanged(keys="image", a_min=-57, a_max=164, b_min=0.0, b_max=1.0, clip=True),
-            EnsureTyped(keys="image"),
         ]
 
     def inferer(self, data=None) -> Inferer:
@@ -68,7 +69,5 @@ class SegmentationSpleen(InferTask):
             EnsureTyped(keys="pred", device=data.get("device") if data else None),
             Activationsd(keys="pred", softmax=True),
             AsDiscreted(keys="pred", argmax=True),
-            ToNumpyd(keys="pred"),
             Restored(keys="pred", ref_image="image"),
-            BoundingBoxd(keys="pred", result="result", bbox="bbox"),
         ]

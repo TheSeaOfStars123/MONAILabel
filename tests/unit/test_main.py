@@ -1,3 +1,14 @@
+# Copyright (c) MONAI Consortium
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import os
 import shutil
@@ -39,12 +50,12 @@ class MyTestCase(unittest.TestCase):
         Main().action_start_server(args)
 
     def test_apps(self):
-        args = argparse.Namespace(download=False)
+        args = argparse.Namespace(download=False, prefix="")
         Main().action_apps(args)
 
     def test_apps_download(self):
         output = os.path.join(self.data_dir, "downloaded_app")
-        args = argparse.Namespace(download=True, name="radiology", output=output)
+        args = argparse.Namespace(download=True, prefix="", name="radiology", output=output)
         Main().action_apps(args)
         assert os.path.isdir(output)
         shutil.rmtree(output, ignore_errors=True)
@@ -61,12 +72,12 @@ class MyTestCase(unittest.TestCase):
         shutil.rmtree(output, ignore_errors=True)
 
     def test_plugins(self):
-        args = argparse.Namespace(download=False)
+        args = argparse.Namespace(download=False, prefix="")
         Main().action_plugins(args)
 
     def test_plugins_download(self):
         output = os.path.join(self.data_dir, "downloaded_plugins")
-        args = argparse.Namespace(download=True, name="slicer", output=output)
+        args = argparse.Namespace(download=True, prefix="", name="slicer", output=output)
         Main().action_plugins(args)
         assert os.path.isdir(output)
         shutil.rmtree(output, ignore_errors=True)

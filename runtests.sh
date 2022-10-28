@@ -44,27 +44,42 @@ doQuickTests=false
 doNetTests=false
 doDryRun=false
 doUnitTests=false
+doBlackFormat=false
+doBlackFix=false
+doIsortFormat=false
+doIsortFix=false
+doFlake8Format=false
 doPytypeFormat=false
+doMypyFormat=false
 doCleanup=false
 
 NUM_PARALLEL=1
+LINE_LENGTH=120
 
 PY_EXE=${MONAILABEL_PY_EXE:-$(which python3)}
 
 function print_usage() {
-  echo "runtests.sh [--codeformat] [--pytype]"
+  echo "runtests.sh [--codeformat] [--autofix] [--isort] [--flake8] [--pytype] [--mypy]"
   echo "            [--unittests] [--net] [--dryrun] [-j number] [--clean] [--help] [--version]"
   echo ""
   echo "MONAILABEL testing utilities."
   echo ""
   echo "Examples:"
   echo "./runtests.sh --codeformat            # run static checks"
+  echo "./runtests.sh --autofix               # run automatic code formatting using \"isort\" and \"black\"."
   echo "./runtests.sh --unittests             # run unit tests with code coverage"
   echo "./runtests.sh --net                   # run integration tests (monailabel PIP package should have been installed)"
   echo "./runtests.sh --clean                 # clean up temporary files and run \"${PY_EXE} setup.py develop --uninstall\"."
   echo ""
+  echo "Code style check options:"
+  echo "    --black           : perform \"black\" code format checks"
+  echo "    --autofix         : format code using \"isort\" and \"black\""
+  echo "    --isort           : perform \"isort\" import sort checks"
+  echo "    --flake8          : perform \"flake8\" code format checks"
+  echo ""
   echo "Python type check options:"
   echo "    --pytype          : perform \"pytype\" static type checks"
+  echo "    --mypy            : perform \"mypy\" static type checks"
   echo "    -j, --jobs        : number of parallel jobs to run \"pytype\" (default $NUM_PARALLEL)"
   echo ""
   echo "MONAILABEL unit testing options:"
@@ -125,10 +140,14 @@ function clean_py() {
   find ${TO_CLEAN} -type d -name ".pytest_cache" -exec rm -r "{}" +
   find ${TO_CLEAN} -maxdepth 1 -type f -name ".coverage.*" -delete
 
+  find ${TO_CLEAN} -type d -name "node_modules" -exec rm -rf "{}" +
+  find ${TO_CLEAN} -type d -name ".gradle" -exec rm -rf "{}" +
+
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name ".eggs" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name "monailabel.egg-info" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name "build" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name "dist" -exec rm -r "{}" +
+  find ${TO_CLEAN} -depth -maxdepth 1 -type d -name ".mypy_cache" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name ".pytype" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name ".coverage" -exec rm -r "{}" +
   find ${TO_CLEAN} -depth -maxdepth 1 -type d -name "__pycache__" -exec rm -r "{}" +
@@ -141,6 +160,11 @@ function torch_validate() {
 function print_error_msg() {
   echo "${red}Error: $1.${noColor}"
   echo ""
+}
+
+function print_style_fail_msg() {
+  echo "${red}Check failed!${noColor}"
+  echo "Please run auto style fixes: ${green}./runtests.sh --autofix${noColor}"
 }
 
 function is_pip_installed() {
@@ -166,10 +190,32 @@ while [[ $# -gt 0 ]]; do
     doUnitTests=true
     ;;
   -f | --codeformat)
+    doBlackFormat=true
+    doIsortFormat=true
+    doFlake8Format=true
     doPytypeFormat=true
+    doMypyFormat=true
+    ;;
+  --black)
+    doBlackFormat=true
+    ;;
+  --autofix)
+    doIsortFix=true
+    doBlackFix=true
+    doIsortFormat=true
+    doBlackFormat=true
+    ;;
+  --isort)
+    doIsortFormat=true
+    ;;
+  --flake8)
+    doFlake8Format=true
     ;;
   --pytype)
     doPytypeFormat=true
+    ;;
+  --mypy)
+    doMypyFormat=true
     ;;
   -j | --jobs)
     NUM_PARALLEL=$2
@@ -230,6 +276,88 @@ fi
 # unconditionally report on the state of monailabel
 print_version
 
+if [ $doIsortFormat = true ]; then
+  set +e # disable exit on failure so that diagnostics can be given on failure
+  if [ $doIsortFix = true ]; then
+    echo "${separator}${blue}isort-fix${noColor}"
+  else
+    echo "${separator}${blue}isort${noColor}"
+  fi
+
+  # ensure that the necessary packages for code format testing are installed
+  if ! is_pip_installed isort; then
+    install_deps
+  fi
+  ${cmdPrefix}${PY_EXE} -m isort --version
+
+  if [ $doIsortFix = true ]; then
+    ${cmdPrefix}${PY_EXE} -m isort -l ${LINE_LENGTH} --profile black "$(pwd)"
+  else
+    ${cmdPrefix}${PY_EXE} -m isort -l ${LINE_LENGTH} --profile black --check "$(pwd)"
+  fi
+
+  isort_status=$?
+  if [ ${isort_status} -ne 0 ]; then
+    print_style_fail_msg
+    exit ${isort_status}
+  else
+    echo "${green}passed!${noColor}"
+  fi
+  set -e # enable exit on failure
+fi
+
+if [ $doBlackFormat = true ]; then
+  set +e # disable exit on failure so that diagnostics can be given on failure
+  if [ $doBlackFix = true ]; then
+    echo "${separator}${blue}black-fix${noColor}"
+  else
+    echo "${separator}${blue}black${noColor}"
+  fi
+
+  # ensure that the necessary packages for code format testing are installed
+  if ! is_pip_installed black; then
+    install_deps
+  fi
+  ${cmdPrefix}${PY_EXE} -m black --version
+
+  if [ $doBlackFix = true ]; then
+    ${cmdPrefix}${PY_EXE} -m black -l ${LINE_LENGTH} "$(pwd)"
+  else
+    ${cmdPrefix}${PY_EXE} -m black -l ${LINE_LENGTH} --check "$(pwd)"
+  fi
+
+  black_status=$?
+  if [ ${black_status} -ne 0 ]; then
+    print_style_fail_msg
+    exit ${black_status}
+  else
+    echo "${green}passed!${noColor}"
+  fi
+  set -e # enable exit on failure
+fi
+
+if [ $doFlake8Format = true ]; then
+  set +e # disable exit on failure so that diagnostics can be given on failure
+  echo "${separator}${blue}flake8${noColor}"
+
+  # ensure that the necessary packages for code format testing are installed
+  if ! is_pip_installed flake8; then
+    install_deps
+  fi
+  ${cmdPrefix}${PY_EXE} -m flake8 --version
+
+  ${cmdPrefix}${PY_EXE} -m flake8 "$(pwd)" --count --statistics --max-line-length ${LINE_LENGTH}
+
+  flake8_status=$?
+  if [ ${flake8_status} -ne 0 ]; then
+    print_style_fail_msg
+    exit ${flake8_status}
+  else
+    echo "${green}passed!${noColor}"
+  fi
+  set -e # enable exit on failure
+fi
+
 if [ $doPytypeFormat = true ]; then
   set +e # disable exit on failure so that diagnostics can be given on failure
   echo "${separator}${blue}pytype${noColor}"
@@ -252,7 +380,34 @@ if [ $doPytypeFormat = true ]; then
   set -e # enable exit on failure
 fi
 
+if [ $doMypyFormat = true ]; then
+  set +e # disable exit on failure so that diagnostics can be given on failure
+  echo "${separator}${blue}mypy${noColor}"
+
+  # ensure that the necessary packages for code format testing are installed
+  if ! is_pip_installed mypy; then
+    install_deps
+  fi
+  ${cmdPrefix}${PY_EXE} -m mypy --version
+
+  if [ $doDryRun = true ]; then
+    ${cmdPrefix}MYPYPATH="$(pwd)"/monailabel ${PY_EXE} -m mypy "$(pwd)"
+  else
+    MYPYPATH="$(pwd)"/monailabel ${PY_EXE} -m mypy "$(pwd)" # cmdPrefix does not work with MYPYPATH
+  fi
+
+  mypy_status=$?
+  if [ ${mypy_status} -ne 0 ]; then
+    : # mypy output already follows format
+    exit ${mypy_status}
+  else
+    : # mypy output already follows format
+  fi
+  set -e # enable exit on failure
+fi
+
 # testing command to run
+export USE_META_DICT=1  # for 0.9.0 compatibility
 cmd="${PY_EXE}"
 
 
@@ -262,7 +417,8 @@ if [ $doUnitTests = true ]; then
   torch_validate
 
   ${cmdPrefix}${PY_EXE} tests/setup.py
-  ${cmdPrefix}${cmd} -m pytest -x --forked --doctest-modules --junitxml=junit/test-results.xml --cov-report xml --cov-report html --cov-report term --cov monailabel tests/unit
+  # --dist loadfile -n auto
+  ${cmdPrefix}${cmd} -m pytest --exitfirst --doctest-modules --junitxml=junit/test-results.xml --cov-report xml --cov-report html --cov-report term --cov monailabel tests/unit
 fi
 
 function check_server_running() {
@@ -270,20 +426,21 @@ function check_server_running() {
   echo ${code}
 }
 
-# network training/inference/eval integration tests
-if [ $doNetTests = true ]; then
+
+function run_integration_tests() {
   echo "${separator}${blue}integration${noColor}"
   torch_validate
 
+  rm -rf tests/data
   ${cmdPrefix}${PY_EXE} tests/setup.py
-  echo "Starting MONAILabel server..."
+  echo "$1 - Starting MONAILabel server..."
   rm -rf tests/data/apps
-  monailabel apps -n radiology -o tests/data/apps -d
-  monailabel start_server -a tests/data/apps/radiology -c models all -s tests/data/dataset/local/spleen -p ${MONAILABEL_SERVER_PORT:-8000} &
+  monailabel apps -n $1 -o tests/data/apps -d
+  monailabel start_server -a tests/data/apps/$1 -c models "$3" -s $2 -p ${MONAILABEL_SERVER_PORT:-8000} &
 
   wait_time=0
   server_is_up=0
-  start_time_out=180
+  start_time_out=240
 
   while [[ $wait_time -le ${start_time_out} ]]; do
     if [ "$(check_server_running)" == "200" ]; then
@@ -292,18 +449,26 @@ if [ $doNetTests = true ]; then
     fi
     sleep 5
     wait_time=$((wait_time + 5))
-    echo "Waiting for MONAILabel to be up and running..."
+    echo "$1 - Waiting for MONAILabel to be up and running..."
   done
   echo ""
 
   if [ "$server_is_up" == "1" ]; then
-    echo "MONAILabel server is up and running."
+    echo "$1 - MONAILabel server is up and running."
   else
-    echo "Failed to start MONAILabel server. Exiting..."
+    echo "$1 - Failed to start MONAILabel server. Exiting..."
     exit 1
   fi
 
-  ${cmdPrefix}${cmd} -m pytest -v tests/integration --no-summary -x
-  echo "Finished All Integration Tests;  Stop/Kill MONAILabel Server..."
+  ${cmdPrefix}${cmd} -m pytest -v tests/integration/$1 --no-summary -x
+  echo "$1 - Finished All Integration Tests;  Stop/Kill MONAILabel Server..."
   kill -9 $(ps -ef | grep monailabel | grep start_server | grep -v grep | awk '{print $2}')
+}
+
+# network training/inference/eval integration tests
+if [ $doNetTests = true ]; then
+  run_integration_tests "radiology" "tests/data/dataset/local/spleen" "deepedit,segmentation_spleen,segmentation,deepgrow_2d,deepgrow_3d"
+  run_integration_tests "pathology" "tests/data/pathology" "deepedit_nuclei,segmentation_nuclei,nuclick"
+  run_integration_tests "monaibundle" "tests/data/dataset/local/spleen" "spleen_ct_segmentation_v0.1.0,spleen_deepedit_annotation_v0.1.0,swin_unetr_btcv_segmentation_v0.1.0"
+  run_integration_tests "endoscopy" "tests/data/endoscopy" "tooltracking,inbody,deepedit"
 fi

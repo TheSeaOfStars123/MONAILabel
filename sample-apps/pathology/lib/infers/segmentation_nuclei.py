@@ -8,11 +8,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 from typing import Any, Callable, Dict, Sequence
 
 import numpy as np
-from lib.transforms import FilterImaged, LoadImagePatchd, PostFilterLabeld
+from lib.transforms import LoadImagePatchd, PostFilterLabeld
 from monai.transforms import (
     Activationsd,
     AsChannelFirstd,
@@ -23,14 +24,15 @@ from monai.transforms import (
     ToNumpyd,
 )
 
-from monailabel.interfaces.tasks.infer import InferTask, InferType
+from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import FindContoursd
 from monailabel.transform.writer import PolygonWriter
 
 logger = logging.getLogger(__name__)
 
 
-class SegmentationNuclei(InferTask):
+class SegmentationNuclei(BasicInferTask):
     """
     This provides Inference Engine for pre-trained segmentation (UNet) model over MSD Dataset.
     """
@@ -64,8 +66,8 @@ class SegmentationNuclei(InferTask):
 
     def pre_transforms(self, data=None) -> Sequence[Callable]:
         return [
-            LoadImagePatchd(keys="image", conversion="RGB", dtype=np.uint8, padding=False),
-            FilterImaged(keys="image"),
+            LoadImagePatchd(keys="image", mode="RGB", dtype=np.uint8, padding=False),
+            EnsureTyped(keys="image", device=data.get("device") if data else None),
             AsChannelFirstd(keys="image"),
             ScaleIntensityRangeD(keys="image", a_min=0.0, a_max=255.0, b_min=-1.0, b_max=1.0),
         ]
@@ -73,8 +75,8 @@ class SegmentationNuclei(InferTask):
     def post_transforms(self, data=None) -> Sequence[Callable]:
         return [
             EnsureTyped(keys="pred", device=data.get("device") if data else None),
-            Activationsd(keys="pred", softmax=len(self.labels) > 1, sigmoid=len(self.labels) == 1),
-            AsDiscreted(keys="pred", argmax=len(self.labels) > 1, threshold=0.5 if len(self.labels) == 1 else None),
+            Activationsd(keys="pred", softmax=True),
+            AsDiscreted(keys="pred", argmax=True),
             SqueezeDimd(keys="pred", dim=0),
             ToNumpyd(keys=("image", "pred")),
             PostFilterLabeld(keys="pred", image="image"),

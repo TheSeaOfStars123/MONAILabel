@@ -10,15 +10,18 @@
 # limitations under the License.
 
 import logging
-from typing import Optional, Sequence, Union
+from typing import Dict, Hashable, Mapping, Optional, Sequence, Union
 
 import cv2
 import numpy as np
 import skimage.measure as measure
-from monai.config import KeysCollection
-from monai.transforms import MapTransform, Resize, generate_spatial_bounding_box, get_extreme_points
+import torch
+from monai.config import KeysCollection, NdarrayOrTensor
+from monai.data import MetaTensor
+from monai.transforms import MapTransform, Resize, Transform, generate_spatial_bounding_box, get_extreme_points
 from monai.utils import InterpolateMode, ensure_tuple_rep
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
+from torchvision.utils import make_grid, save_image
 
 from monailabel.utils.others.label_colors import get_color
 
@@ -104,11 +107,16 @@ class Restored(MapTransform):
 
     def __call__(self, data):
         d = dict(data)
-        meta_dict = d[f"{self.ref_image}_{self.meta_key_postfix}"]
+        meta_dict = (
+            d[self.ref_image].meta
+            if d.get(self.ref_image) is not None and isinstance(d[self.ref_image], MetaTensor)
+            else d.get(f"{self.ref_image}_{self.meta_key_postfix}", {})
+        )
+
         for idx, key in enumerate(self.keys):
             result = d[key]
             current_size = result.shape[1:] if self.has_channel else result.shape
-            spatial_shape = meta_dict["spatial_shape"]
+            spatial_shape = meta_dict.get("spatial_shape", current_size)
             spatial_size = spatial_shape[-len(current_size) :]
 
             # Undo Spacing
@@ -136,7 +144,9 @@ class FindContoursd(MapTransform):
         result="result",
         result_output_key="annotation",
         key_label_colors="label_colors",
+        key_foreground_points=None,
         labels=None,
+        colormap=None,
     ):
         super().__init__(keys)
 
@@ -146,6 +156,8 @@ class FindContoursd(MapTransform):
         self.result = result
         self.result_output_key = result_output_key
         self.key_label_colors = key_label_colors
+        self.key_foreground_points = key_foreground_points
+        self.colormap = colormap
 
         labels = labels if labels else dict()
         labels = [labels] if isinstance(labels, str) else labels
@@ -161,7 +173,10 @@ class FindContoursd(MapTransform):
         size = d.get("size", [0, 0])
         min_poly_area = d.get("min_poly_area", self.min_poly_area)
         max_poly_area = d.get("max_poly_area", self.max_poly_area)
-        color_map = d.get(self.key_label_colors)
+        color_map = d.get(self.key_label_colors) if self.colormap is None else self.colormap
+
+        foreground_points = d.get(self.key_foreground_points, []) if self.key_foreground_points else []
+        foreground_points = [Point(pt[1], pt[0]) for pt in foreground_points]  # polygons in (y, x) format
 
         elements = []
         label_names = set()
@@ -173,30 +188,36 @@ class FindContoursd(MapTransform):
             labels = [label for label in np.unique(p).tolist() if label > 0]
             logger.debug(f"Total Unique Masks (excluding background): {labels}")
             for label_idx in labels:
-                p = d[key]
-                p[p == label_idx] = 1
+                p = d[key].array if isinstance(d[key], MetaTensor) else d[key]
+                p = np.where(p == label_idx, 1, 0).astype(np.uint8)
+
                 label_name = self.labels.get(label_idx, label_idx)
                 label_names.add(label_name)
 
                 polygons = []
                 contours, _ = cv2.findContours(p, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 for contour in contours:
-                    contour = np.squeeze(contour)
                     if len(contour) < 3:
+                        continue
+
+                    contour = np.squeeze(contour)
+                    area = cv2.contourArea(contour)
+                    if area < min_poly_area:  # Ignore poly with lesser area
+                        continue
+                    if 0 < max_poly_area < area:  # Ignore very large poly (e.g. in case of nuclei)
                         continue
 
                     contour[:, 0] += location[0]  # X
                     contour[:, 1] += location[1]  # Y
 
                     coords = contour.astype(int).tolist()
-                    pobj = Polygon(coords)
-                    if pobj.area < min_poly_area:  # Ignore poly with lesser area
-                        continue
-                    if 0 < max_poly_area < pobj.area:  # Ignore very large poly (e.g. in case of nuclei)
-                        continue
-
-                    logger.debug(f"Area: {pobj.area}; Perimeter: {pobj.length}; Count: {len(coords)}")
-                    polygons.append(coords)
+                    if foreground_points:
+                        for pt in foreground_points:
+                            if Polygon(coords).contains(pt):
+                                polygons.append(coords)
+                                break
+                    else:
+                        polygons.append(coords)
 
                 if len(polygons):
                     logger.debug(f"+++++ {label_idx} => Total Polygons Found: {len(polygons)}")
@@ -213,3 +234,53 @@ class FindContoursd(MapTransform):
             }
             logger.debug(f"+++++ ALL => Total Annotation Elements Found: {len(elements)}")
         return d
+
+
+class DumpImagePrediction2Dd(Transform):
+    def __init__(self, image_path, pred_path):
+        self.image_path = image_path
+        self.pred_path = pred_path
+
+    def __call__(self, data):
+        d = dict(data)
+        image = d["image"].array
+        pred = d["pred"].array
+
+        img_tensor = make_grid(torch.from_numpy(image[:3] * 128 + 128), normalize=True)
+        save_image(img_tensor, self.image_path)
+
+        image_pred = [pred, image[3][None], image[4][None]] if image.shape[0] == 5 else [pred]
+        image_pred_np = np.array(image_pred)
+        image_pred_t = torch.from_numpy(image_pred_np)
+
+        tensor = make_grid(
+            tensor=image_pred_t,
+            nrow=len(image_pred),
+            normalize=True,
+            pad_value=10,
+        )
+        save_image(tensor, self.pred_path)
+        return d
+
+
+class MergeAllPreds(MapTransform):
+    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False):
+        """
+        Merge all predictions to one channel
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+        """
+        super().__init__(keys, allow_missing_keys)
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]):
+        d: Dict = dict(data)
+        merge_image = None
+        for idx, key in enumerate(self.key_iterator(d)):
+            if idx == 0:
+                merge_image = d[key]
+            else:
+                merge_image = merge_image + d[key]
+            # For labels that overlap keep the last label number only
+            merge_image[merge_image > d[key].max()] = d[key].max()
+        return merge_image

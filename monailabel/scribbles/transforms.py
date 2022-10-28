@@ -8,12 +8,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 from copy import deepcopy
 from typing import Optional
 
 import numpy as np
 import torch
+from monai.data import MetaTensor
 from monai.networks.blocks import CRF
 from monai.transforms import Transform
 from scipy.special import softmax
@@ -39,7 +41,15 @@ class InteractiveSegmentationTransform(Transform):
         if key not in data.keys():
             raise ValueError(f"Key {key} not found, present keys {data.keys()}")
 
-        return data[key]
+        return data[key].array.copy() if isinstance(data[key], MetaTensor) else data[key].copy()
+
+    def _save_data(self, data, key, value):
+        if key in data.keys() and isinstance(data[key], MetaTensor):
+            data[key].array = value
+        else:
+            data[key] = value
+
+        return data
 
     def _normalise_logits(self, data, axis=0):
         # check if logits is a true prob, if not then apply softmax
@@ -107,11 +117,12 @@ class AddBackgroundScribblesFromROId(InteractiveSegmentationTransform):
 
         # read relevant terms from data
         scribbles = self._fetch_data(d, self.scribbles)
+        logger.info(f"Scribbles: {scribbles.shape}")
 
         # get any existing roi information and apply it to scribbles, skip otherwise
         selected_roi = d.get(self.roi_key, None)
         if selected_roi:
-            mask = np.ones_like(scribbles).astype(np.bool)
+            mask = np.ones_like(scribbles).astype(bool)
             mask[
                 :,
                 selected_roi[0] : selected_roi[1],
@@ -141,7 +152,7 @@ class AddBackgroundScribblesFromROId(InteractiveSegmentationTransform):
                 ] = self.scribbles_fg_label
 
         # return new scribbles
-        d[self.scribbles] = scribbles
+        d = self._save_data(d, self.scribbles, scribbles)
 
         return d
 
@@ -202,7 +213,7 @@ class MakeLikelihoodFromScribblesHistogramd(InteractiveSegmentationTransform):
         if self.normalise:
             post_proc_label = self._normalise_logits(post_proc_label, axis=0)
 
-        d[self.post_proc_label] = post_proc_label
+        d = self._save_data(d, self.post_proc_label, post_proc_label)
 
         return d
 
@@ -257,7 +268,7 @@ class MakeLikelihoodFromScribblesGMMd(InteractiveSegmentationTransform):
         if self.normalise:
             post_proc_label = self._normalise_logits(post_proc_label, axis=0)
 
-        d[self.post_proc_label] = post_proc_label
+        d = self._save_data(d, self.post_proc_label, post_proc_label)
 
         return d
 
@@ -295,7 +306,8 @@ class SoftenProbSoftmax(InteractiveSegmentationTransform):
         # normalise using softmax with temperature beta
         prob = softmax(logits * beta, axis=0)
 
-        d[self.prob] = prob
+        d = self._save_data(d, self.prob, prob)
+
         return d
 
 
@@ -382,7 +394,8 @@ class MakeISegUnaryd(InteractiveSegmentationTransform):
             scribbles_bg_label=self.scribbles_bg_label,
             scribbles_fg_label=self.scribbles_fg_label,
         )
-        d[self.unary] = unary_term
+
+        d = self._save_data(d, self.unary, unary_term)
 
         return d
 
@@ -469,7 +482,7 @@ class ApplyGraphCutOptimisationd(InteractiveSegmentationTransform):
         # run GraphCut
         post_proc_label = maxflow(pairwise_term, unary_term, lamda=self.lamda, sigma=self.sigma)
 
-        d[self.post_proc_label] = post_proc_label
+        d = self._save_data(d, self.post_proc_label, post_proc_label)
 
         return d
 
@@ -516,7 +529,7 @@ class ApplyCRFOptimisationd(InteractiveSegmentationTransform):
         gaussian_spatial_sigma: float = 0.5,
         update_factor: float = 5.0,
         compatibility_matrix: Optional[torch.Tensor] = None,
-        device: str = "cuda" if torch.cuda.is_available else "cpu",
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ) -> None:
         super().__init__(meta_key_postfix)
         self.unary = unary
@@ -575,13 +588,14 @@ class ApplyCRFOptimisationd(InteractiveSegmentationTransform):
 
         # run MONAI's CRF without any gradients
         with torch.no_grad():
-            d[self.post_proc_label] = (
+            post_proc_label = (
                 torch.argmax(crf_layer(unary_term, pairwise_term), dim=1, keepdim=True)
                 .squeeze_(dim=0)
                 .detach()
                 .cpu()
                 .numpy()
             )
+            d = self._save_data(d, self.post_proc_label, post_proc_label)
 
         return d
 

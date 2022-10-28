@@ -15,8 +15,10 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import ssl
 import tempfile
+from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 
 import requests
@@ -45,7 +47,7 @@ class MONAILabelClient:
 
     def info(self):
         selector = "/info/"
-        status, response, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
+        status, response, _, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
@@ -58,7 +60,7 @@ class MONAILabelClient:
     def next_sample(self, strategy, params):
         params = self._update_client_id(params)
         selector = f"/activelearning/{MONAILabelUtils.urllib_quote_plus(strategy)}"
-        status, response, _ = MONAILabelUtils.http_method("POST", self._server_url, selector, params)
+        status, response, _, _ = MONAILabelUtils.http_method("POST", self._server_url, selector, params)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
@@ -84,7 +86,7 @@ class MONAILabelClient:
 
     def get_session(self, session_id):
         selector = f"/session/{MONAILabelUtils.urllib_quote_plus(session_id)}"
-        status, response, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
+        status, response, _, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
@@ -96,7 +98,7 @@ class MONAILabelClient:
 
     def remove_session(self, session_id):
         selector = f"/session/{MONAILabelUtils.urllib_quote_plus(session_id)}"
-        status, response, _ = MONAILabelUtils.http_method("DELETE", self._server_url, selector)
+        status, response, _, _ = MONAILabelUtils.http_method("DELETE", self._server_url, selector)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
@@ -113,7 +115,7 @@ class MONAILabelClient:
         params = self._update_client_id(params)
         fields = {"params": json.dumps(params) if params else "{}"}
 
-        status, response, _ = MONAILabelUtils.http_multipart("PUT", self._server_url, selector, fields, files)
+        status, response, _, _ = MONAILabelUtils.http_multipart("PUT", self._server_url, selector, fields, files)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR,
@@ -135,7 +137,7 @@ class MONAILabelClient:
         }
         files = {"label": label_in}
 
-        status, response, _ = MONAILabelUtils.http_multipart("PUT", self._server_url, selector, fields, files)
+        status, response, _, _ = MONAILabelUtils.http_multipart("PUT", self._server_url, selector, fields, files)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR,
@@ -145,6 +147,39 @@ class MONAILabelClient:
         response = response.decode("utf-8") if isinstance(response, bytes) else response
         logging.debug(f"Response: {response}")
         return json.loads(response)
+
+    def datastore(self):
+        selector = "/datastore/?output=all"
+        status, response, _, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
+        if status != 200:
+            raise MONAILabelException(
+                MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
+            )
+
+        response = response.decode("utf-8") if isinstance(response, bytes) else response
+        logging.debug(f"Response: {response}")
+        return json.loads(response)
+
+    def download_label(self, label_id, tag):
+        selector = "/datastore/label?label={}&tag={}".format(
+            MONAILabelUtils.urllib_quote_plus(label_id), MONAILabelUtils.urllib_quote_plus(tag)
+        )
+        status, response, _, headers = MONAILabelUtils.http_method("GET", self._server_url, selector)
+        if status != 200:
+            raise MONAILabelException(
+                MONAILabelError.SERVER_ERROR, f"Status: {status}; Response: {response}", status, response
+            )
+
+        if not headers.get("content-disposition"):
+            logging.warning("Filename not found. Fall back to no loaded labels")
+        file_name = re.findall('filename="(.+)"', headers.get("content-disposition"))[0]
+
+        file_ext = "".join(Path(file_name).suffixes)
+        local_filename = tempfile.NamedTemporaryFile(dir=self._tmpdir, suffix=file_ext).name
+        with open(local_filename, "wb") as f:
+            f.write(response)
+
+        return local_filename
 
     def infer(self, model, image_in, params, label_in=None, file=None, session_id=None):
         selector = "/infer/{}?image={}".format(
@@ -159,7 +194,7 @@ class MONAILabelClient:
         files = {"label": label_in} if label_in else {}
         files.update({"file": file} if file and not session_id else {})
 
-        status, form, files = MONAILabelUtils.http_multipart("POST", self._server_url, selector, fields, files)
+        status, form, files, _ = MONAILabelUtils.http_multipart("POST", self._server_url, selector, fields, files)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR,
@@ -180,7 +215,7 @@ class MONAILabelClient:
         if model:
             selector += MONAILabelUtils.urllib_quote_plus(model)
 
-        status, response, _ = MONAILabelUtils.http_method("POST", self._server_url, selector, params)
+        status, response, _, _ = MONAILabelUtils.http_method("POST", self._server_url, selector, params)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR,
@@ -193,7 +228,7 @@ class MONAILabelClient:
 
     def train_stop(self):
         selector = "/train/"
-        status, response, _ = MONAILabelUtils.http_method("DELETE", self._server_url, selector)
+        status, response, _, _ = MONAILabelUtils.http_method("DELETE", self._server_url, selector)
         if status != 200:
             raise MONAILabelException(
                 MONAILabelError.SERVER_ERROR,
@@ -208,7 +243,7 @@ class MONAILabelClient:
         selector = "/train/"
         if check_if_running:
             selector += "?check_if_running=true"
-        status, response, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
+        status, response, _, _ = MONAILabelUtils.http_method("GET", self._server_url, selector)
         if check_if_running:
             return status == 200
 
@@ -316,12 +351,12 @@ class MONAILabelUtils:
                 form, files = MONAILabelUtils.parse_multipart(response.fp if response.fp else response, response.msg)
                 logging.debug(f"Response FORM: {form}")
                 logging.debug(f"Response FILES: {files.keys()}")
-                return response.status, form, files
+                return response.status, form, files, response.headers
             else:
-                return response.status, response.read(), None
+                return response.status, response.read(), None, response.headers
 
         logging.debug("Reading status/content from simple response!")
-        return response.status, response.read(), None
+        return response.status, response.read(), None, response.headers
 
     @staticmethod
     def save_result(files, tmpdir):

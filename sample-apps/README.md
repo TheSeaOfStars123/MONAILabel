@@ -1,3 +1,16 @@
+<!--
+Copyright (c) MONAI Consortium
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Available MONAI Label Apps
 
 ### Overview
@@ -31,14 +44,7 @@ If you are developing any examples related to pathology, you should refer this a
     - Epithelial
 
 
-### Deprecated Apps
-Following apps are deprecated/removed.  It is recommended to use [Radiology](./radiology) and [Pathology](./pathology) apps for reference.
+## [MONAI Bundle](./monaibundle)
 
-##### ~~DeepGrow~~
-
-##### ~~DeepEdit~~
-
-##### ~~Segmentation~~
-
-
-
+This app has example models to do both interactive and automated segmentation using monai-bundles defined in [MONAI ZOO](https://github.com/Project-MONAI/model-zoo/tree/dev/models).
+It can pull any bundle defined in the zoo if it is compatible and follows the checklist as defined [here](./monaibundle).

@@ -20,6 +20,7 @@ import sys
 
 import uvicorn
 
+from monailabel import print_config
 from monailabel.config import settings
 from monailabel.utils.others.generic import init_log_config
 
@@ -85,8 +86,9 @@ class Main:
 
     def args_parser(self, name="monailabel"):
         parser = argparse.ArgumentParser(name)
-        subparsers = parser.add_subparsers(help="sub-command help")
+        parser.add_argument("-v", "--version", action="store_true", help="print version")
 
+        subparsers = parser.add_subparsers(help="sub-command help")
         if "start_server" in self.actions:
             parser_a = subparsers.add_parser("start_server", help="Start Application Server")
             self.args_start_server(parser_a)
@@ -112,6 +114,11 @@ class Main:
     def run(self):
         parser = self.args_parser()
         args = parser.parse_args()
+
+        if args.version:
+            print_config()
+            exit(0)
+
         if not hasattr(args, "action"):
             parser.print_usage()
             exit(-1)
@@ -124,6 +131,12 @@ class Main:
             self.action_plugins(args)
         else:
             self.action_start_server(args)
+
+    def action_apps(self, args):
+        self._action_xyz(args, "sample-apps", "App", None, shutil.ignore_patterns("logs", "model", "__pycache__"))
+
+    def action_plugins(self, args):
+        self._action_xyz(args, "plugins", "Plugin", None, shutil.ignore_patterns("__pycache__"))
 
     def action_datasets(self, args):
         from monai.apps.datasets import DecathlonDataset
@@ -164,68 +177,39 @@ class Main:
             os.unlink(tarfile_name)
             print(f"{args.name} is downloaded at: {dataset_dir}")
 
-    def action_apps(self, args):
+    def _get_installed_dir(self, prefix, name):
         project_root_absolute = pathlib.Path(__file__).parent.parent.resolve()
-        apps_dir = os.path.join(project_root_absolute, "sample-apps")
-        if not os.path.exists(apps_dir):
-            apps_dir = os.path.join(args.prefix if args.prefix else sys.prefix, "monailabel", "sample-apps")
+        d = os.path.join(project_root_absolute, name)
+        if not os.path.exists(d):
+            if prefix:
+                d = os.path.join(prefix, "monailabel", name)
+            else:
+                d = os.path.join(sys.prefix, "monailabel", name)
+                if not os.path.exists(d):
+                    d = os.path.join(pathlib.Path.home(), ".local", "monailabel", name)
+        return d
 
-        apps = os.listdir(apps_dir)
-        apps = [os.path.basename(a) for a in apps]
-        apps.sort()
+    def _action_xyz(self, args, name, title, exclude, ignore):
+        xyz_dir = self._get_installed_dir(args.prefix, name)
+        exclude = [exclude] if isinstance(exclude, str) else exclude
 
-        resource = {
-            "Radiology based Apps": [a for a in apps if a.startswith("radiology")],
-            "Pathology based Apps": [a for a in apps if a.startswith("pathology")],
-        }
+        xyz = os.listdir(xyz_dir)
+        xyz = [os.path.basename(a) for a in xyz if os.path.isdir(os.path.join(xyz_dir, a))]
+        xyz = [p for p in xyz if p not in exclude] if exclude else xyz
+        xyz.sort()
 
-        if not args.download:
-            print(f"Available Sample Apps are: ({apps_dir})")
-            print("----------------------------------------------------")
-            for k, v in resource.items():
-                print(f"{k}")
-                print("----------------------------------------------------")
-                for n in v:
-                    print("  {:<30}: {}".format(n, f"{apps_dir}/{n}"))
-                print("")
-        else:
-            app_dir = os.path.join(apps_dir, args.name)
-            if args.name not in apps or not os.path.exists(apps_dir):
-                print(f"App {args.name} => {app_dir} not exists")
-                exit(-1)
-
-            output_dir = os.path.realpath(os.path.join(args.output, args.name) if args.output else args.name)
-            if os.path.exists(output_dir):
-                print(f"Directory already exists: {output_dir}")
-                exit(-1)
-
-            if os.path.dirname(output_dir):
-                os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-            shutil.copytree(app_dir, output_dir, ignore=shutil.ignore_patterns("logs", "model", "__pycache__"))
-            print(f"{args.name} is copied at: {output_dir}")
-
-    def action_plugins(self, args):
-        plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "plugins")
-        if not os.path.exists(plugins_dir):
-            plugins_dir = os.path.join(args.prefix if args.prefix else sys.prefix, "monailabel", "plugins")
-
-        plugins = os.listdir(plugins_dir)
-        plugins = [os.path.basename(a) for a in plugins]
-        plugins = [p for p in plugins if p != "ohif"]
-        plugins.sort()
-
-        resource = {p: f"{plugins_dir}/{p}" for p in plugins}
+        resource = {p: f"{xyz_dir}/{p}" for p in xyz}
 
         if not args.download:
-            print("Available Plugins are:")
+            print(f"Available {title}s are:")
             print("----------------------------------------------------")
             for k, v in resource.items():
                 print(f"  {k:<30}: {v}")
             print("")
         else:
-            plugin_dir = os.path.join(plugins_dir, args.name)
-            if args.name not in plugins or not os.path.exists(plugin_dir):
-                print(f"Plugin {args.name} => {plugins_dir} not exists")
+            xyz_dir = os.path.join(xyz_dir, args.name)
+            if args.name not in xyz or not os.path.exists(xyz_dir):
+                print(f"{title} {args.name} => {xyz_dir} not exists")
                 exit(-1)
 
             output_dir = os.path.realpath(os.path.join(args.output, args.name) if args.output else args.name)
@@ -235,7 +219,7 @@ class Main:
 
             if os.path.dirname(output_dir):
                 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-            shutil.copytree(plugin_dir, output_dir, ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(xyz_dir, output_dir, ignore=ignore)
             print(f"{args.name} is copied at: {output_dir}")
 
     def action_start_server(self, args):
@@ -341,9 +325,15 @@ class Main:
             logger.debug("                  ENV VARIABLES/SETTINGS                  ")
             logger.debug("**********************************************************")
             for k, v in settings.dict().items():
-                v = json.dumps(v) if isinstance(v, list) or isinstance(v, dict) else str(v)
+                if isinstance(v, list) or isinstance(v, dict):
+                    v = json.dumps(v)
+                elif v is not None:
+                    v = str(v)
+                else:
+                    v = None
                 logger.debug(f"{'set' if any(platform.win32_ver()) else 'export'} {k}={v}")
-                os.environ[k] = v
+                if v is not None:
+                    os.environ[k] = v
             logger.debug("**********************************************************")
             logger.debug("")
 

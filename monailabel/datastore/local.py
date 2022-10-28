@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import copy
 import fnmatch
 import io
@@ -16,8 +17,10 @@ import logging
 import os
 import pathlib
 import shutil
+import tempfile
 import time
-from typing import Any, Dict, List, Tuple
+import zipfile
+from typing import Any, Dict, List, Optional, Tuple
 
 from filelock import FileLock
 from pydantic import BaseModel
@@ -100,6 +103,7 @@ class LocalDatastore(Datastore):
         datastore_config: str = "datastore_v2.json",
         extensions=("*.nii.gz", "*.nii"),
         auto_reload=False,
+        read_only=False,
     ):
         """
         Creates a `LocalDataset` object
@@ -139,7 +143,8 @@ class LocalDatastore(Datastore):
         os.makedirs(self._datastore.label_path(DefaultLabelTag.ORIGINAL), exist_ok=True)
 
         # reconcile the loaded datastore file with any existing files in the path
-        self._reconcile_datastore()
+        if not read_only:
+            self._reconcile_datastore()
 
         if auto_reload:
             logger.info("Start observing external modifications on datastore (AUTO RELOAD)")
@@ -243,7 +248,6 @@ class LocalDatastore(Datastore):
                 {
                     "image": os.path.realpath(os.path.join(image_path, self._filename(k, v.image.ext))),
                     "label": os.path.realpath(os.path.join(label_path, self._filename(k, v.labels[tag].ext))),
-                    "meta": {"image": v.image.info, "label": v.labels[tag].info},
                 }
             )
 
@@ -367,6 +371,38 @@ class LocalDatastore(Datastore):
         :return: list of image ids List[str]
         """
         return list(self._datastore.objects.keys())
+
+    def get_dataset_archive(self, limit_cases: Optional[int]) -> str:
+        """
+        Retrieve ZIP archive of the full dataset containing images,
+        labels and metadata
+
+        :param limit_cases: limit the included cases to this number
+        :return: path to ZIP archive of the full dataset
+        """
+        dl = self.datalist()
+
+        assert len(dl) > 0, "ZIP archive was not created, nothing to include"
+
+        if limit_cases and limit_cases in list(range(1, len(dl))):
+            logger.info(f"Number of cases in datalist reduced to: {limit_cases} of {len(dl)} case(s)")
+            dl = dl[:limit_cases]
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            with zipfile.ZipFile(temp_file, mode="x") as archive:
+                logger.info(f"ZIP archive will be written to: {archive.filename}")
+                for d in dl:
+                    # write image and corresponding label file to archive
+                    for key in d.keys():
+                        path = d[key]
+                        archive.write(path, arcname=os.path.join(key, os.path.basename(path)))
+                # add metadata
+                datastore_metadata: str = self._datastore.json(exclude={"base_path"})
+                archive.writestr("metadata.json", datastore_metadata)
+
+            assert archive.filename is not None, "ZIP archive could not be created"
+
+            return archive.filename
 
     def _on_any_event(self, event):
         if self._ignore_event_count:

@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 
 import numpy as np
@@ -142,6 +143,8 @@ def make_histograms(image, scrib, scribbles_bg_label, scribbles_fg_label, alpha_
 def make_likelihood_image_histogram(
     image, scrib, scribbles_bg_label, scribbles_fg_label, num_bins=64, return_label=False
 ):
+    if isinstance(image, torch.Tensor):
+        image = image.numpy()
     # normalise image in range [0, 1] if needed
     min_img = np.min(image)
     max_img = np.max(image)
@@ -193,6 +196,16 @@ def learn_and_apply_gmm_monai(image, scrib, scribbles_bg_label, scribbles_fg_lab
     # if no cuda device found, then exit now
     if not torch.cuda.is_available():
         raise OSError("Unable to find CUDA device, check your torch/monai installation")
+
+    from torch.utils.cpp_extension import CUDA_HOME
+
+    if not CUDA_HOME:
+        raise OSError(
+            "Unable to find CUDA_HOME.  Install CUDA Toolkit: https://developer.nvidia.com/cuda-downloads\n"
+            "Example for Ubuntu: \n"
+            "  1) wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda_11.7.0_515.43.04_linux.run\n"
+            "  2) sudo sh cuda_11.7.0_515.43.04_linux.run --silent --toolkit"
+        )
 
     device = "cuda"
     image = torch.from_numpy(image).type(torch.float32).to(device)

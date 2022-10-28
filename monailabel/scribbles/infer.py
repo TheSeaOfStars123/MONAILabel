@@ -11,7 +11,7 @@
 
 from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ScaleIntensityRanged, Spacingd
 
-from monailabel.interfaces.tasks.infer import InferTask, InferType
+from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.scribbles.transforms import (
     AddBackgroundScribblesFromROId,
     ApplyGraphCutOptimisationd,
@@ -19,10 +19,11 @@ from monailabel.scribbles.transforms import (
     MakeLikelihoodFromScribblesGMMd,
     MakeLikelihoodFromScribblesHistogramd,
 )
+from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import BoundingBoxd, Restored
 
 
-class ScribblesLikelihoodInferTask(InferTask):
+class ScribblesLikelihoodInferTask(BasicInferTask):
     """
     Defines a generic Scribbles Likelihood based segmentor infertask
     """
@@ -171,7 +172,8 @@ class GMMBasedGraphCut(ScribblesLikelihoodInferTask):
     """
     Defines Gaussian Mixture Model (GMM) based task for Generic segmentation from the following papers:
 
-    Rother, Carsten, Vladimir Kolmogorov, and Andrew Blake. "" GrabCut" interactive foreground extraction using iterated graph cuts."
+    Rother, Carsten, Vladimir Kolmogorov, and Andrew Blake. "" GrabCut" interactive foreground extraction
+    using iterated graph cuts."
     ACM transactions on graphics (TOG) 23.3 (2004): 309-314.
 
     Wang, Guotai, et al. "Interactive medical image segmentation using deep learning with image-specific fine tuning."

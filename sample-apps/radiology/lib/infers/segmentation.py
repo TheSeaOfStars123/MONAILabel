@@ -8,6 +8,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import Callable, Sequence
 
 from monai.inferers import Inferer, SlidingWindowInferer
@@ -20,14 +21,14 @@ from monai.transforms import (
     LoadImaged,
     ScaleIntensityRanged,
     Spacingd,
-    ToNumpyd,
 )
 
-from monailabel.interfaces.tasks.infer import InferTask, InferType
+from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import Restored
 
 
-class Segmentation(InferTask):
+class Segmentation(BasicInferTask):
     """
     This provides Inference Engine for pre-trained segmentation (UNet) model over MSD Dataset.
     """
@@ -57,10 +58,10 @@ class Segmentation(InferTask):
     def pre_transforms(self, data=None) -> Sequence[Callable]:
         return [
             LoadImaged(keys="image", reader="ITKReader"),
+            EnsureTyped(keys="image", device=data.get("device") if data else None),
             EnsureChannelFirstd(keys="image"),
             Spacingd(keys="image", pixdim=self.target_spacing),
             ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
-            EnsureTyped(keys="image"),
         ]
 
     def inferer(self, data=None) -> Inferer:
@@ -68,18 +69,12 @@ class Segmentation(InferTask):
 
     def post_transforms(self, data=None) -> Sequence[Callable]:
         largest_cc = False if not data else data.get("largest_cc", False)
-        applied_labels = list(self.labels.values()) if isinstance(self.labels, dict) else self.labels
         t = [
             EnsureTyped(keys="pred", device=data.get("device") if data else None),
-            Activationsd(keys="pred", softmax=len(self.labels) > 1, sigmoid=len(self.labels) == 1),
-            AsDiscreted(keys="pred", argmax=len(self.labels) > 1, threshold=0.5 if len(self.labels) == 1 else None),
+            Activationsd(keys="pred", softmax=True),
+            AsDiscreted(keys="pred", argmax=True),
         ]
         if largest_cc:
-            t.append(KeepLargestConnectedComponentd(keys="pred", applied_labels=applied_labels))
-        t.extend(
-            [
-                ToNumpyd(keys="pred"),
-                Restored(keys="pred", ref_image="image"),
-            ]
-        )
+            t.append(KeepLargestConnectedComponentd(keys="pred"))
+        t.append(Restored(keys="pred", ref_image="image"))
         return t
