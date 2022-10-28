@@ -15,4 +15,5 @@ from .localization_spine import LocalizationSpine
 from .localization_vertebra import LocalizationVertebra
 from .segmentation import Segmentation
 from .segmentation_spleen import SegmentationSpleen
+from .segmentation_breast import SegmentationBreast
 from .segmentation_vertebra import SegmentationVertebra

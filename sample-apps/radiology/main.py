@@ -254,7 +254,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--studies", default=studies)
-    parser.add_argument("-m", "--model", default="localization_spine,localization_vertebra,segmentation_vertebra")
+    parser.add_argument("-m", "--model", default="segmentation_spleen")
     parser.add_argument("-t", "--test", default="infer", choices=("train", "infer"))
     args = parser.parse_args()
 

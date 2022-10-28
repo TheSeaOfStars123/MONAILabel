@@ -17,6 +17,7 @@ import torch
 from monai.config import KeysCollection, NdarrayOrTensor
 from monai.transforms import CropForeground, GaussianSmooth, Randomizable, Resize, ScaleIntensity, SpatialCrop
 from monai.transforms.transform import MapTransform, Transform
+from scipy import ndimage
 
 logger = logging.getLogger(__name__)
 
@@ -549,4 +550,28 @@ class CacheObjectd(MapTransform):
             cache_key = f"{key}_cached"
             if d.get(cache_key) is None:
                 d[cache_key] = copy.deepcopy(d[key])
+        return d
+
+class SpatialCropByRoiD(MapTransform):
+    def __init__(self, keys: KeysCollection):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        d = dict(data)
+        ORI_SHAPE = d["label"].shape
+        CM = list(map(int, ndimage.measurements.center_of_mass(d['label'].squeeze())))
+        if CM[0] - 64  < 0:
+            delta = - (CM[0] - 64)
+            CM[0] += delta
+        if CM[0] + 64 > ORI_SHAPE[0]:
+            CM[0] = CM[0] - (CM[0] + 64 - ORI_SHAPE[0])
+        if CM[0] - 64 < 0:
+            CM[0] = CM[0] - (CM[0] - 64)
+        if CM[]
+        # CM = (448, 235, 64)  # Breast_Traning_271
+        for key in self.keys:
+            img = d[key]
+            crop = SpatialCrop(roi_center=CM, roi_size=(128, 128, 48))
+            d[key] = crop(img)
+            logger.info("Processing label: " + d["label_meta_dict"]["filename_or_obj"] + "->" + str(d["label"].shape))
         return d
