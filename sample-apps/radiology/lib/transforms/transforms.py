@@ -558,7 +558,7 @@ class SpatialCropByRoiD(MapTransform):
 
     def __call__(self, data):
         d = dict(data)
-        ORI_SHAPE = d["label"].shape
+        ORI_SHAPE = d["label"].squeeze().shape
         CM = list(map(int, ndimage.measurements.center_of_mass(d['label'].squeeze())))
         # 定义偏移量
         offsetX = 64
