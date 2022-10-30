@@ -560,14 +560,28 @@ class SpatialCropByRoiD(MapTransform):
         d = dict(data)
         ORI_SHAPE = d["label"].shape
         CM = list(map(int, ndimage.measurements.center_of_mass(d['label'].squeeze())))
-        if CM[0] - 64  < 0:
-            delta = - (CM[0] - 64)
+        # 定义偏移量
+        offsetX = 64
+        offsetY = 64
+        offsetZ = 24
+        if CM[0] - offsetX < 0:
+            delta = 0 - (CM[0] - offsetX)
             CM[0] += delta
-        if CM[0] + 64 > ORI_SHAPE[0]:
-            CM[0] = CM[0] - (CM[0] + 64 - ORI_SHAPE[0])
-        if CM[0] - 64 < 0:
-            CM[0] = CM[0] - (CM[0] - 64)
-        if CM[]
+        elif CM[0] + offsetX > ORI_SHAPE[0]:
+            delta = CM[0] + offsetX - ORI_SHAPE[0]
+            CM[0] -= delta
+        if CM[1] - offsetY < 0:
+            delta = 0 - (CM[1] - offsetY)
+            CM[1] += delta
+        elif CM[1] + offsetY > ORI_SHAPE[1]:
+            delta = CM[1] + offsetY - ORI_SHAPE[1]
+            CM[1] -= delta
+        if CM[2] - offsetZ < 0:
+            delta = 0 - (CM[2] - offsetZ)
+            CM[2] += delta
+        elif CM[2] + offsetZ > ORI_SHAPE[2]:
+            delta = CM[2] + offsetZ - ORI_SHAPE[2]
+            CM[2] -= delta
         # CM = (448, 235, 64)  # Breast_Traning_271
         for key in self.keys:
             img = d[key]
