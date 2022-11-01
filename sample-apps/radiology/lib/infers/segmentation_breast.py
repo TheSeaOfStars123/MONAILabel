@@ -44,7 +44,7 @@ class SegmentationBreast(InferTask):
          return [
             LoadImaged(keys="image", reader="ITKReader"),
             EnsureChannelFirstd(keys="image"),
-            Spacingd(keys="image", pixdim=self.target_spacing),
+            # Spacingd(keys="image", pixdim=self.target_spacing),
             # Orientationd(keys="image", axcodes="RAS"),
             ScaleIntensityd(keys="image"),
             EnsureTyped(keys="image"),
