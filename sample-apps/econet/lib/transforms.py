@@ -161,7 +161,7 @@ class MakeLikelihoodFromScribblesECONetd(MyInteractiveSegmentationTransform):
                 kernel_size=self.kernel_size,
                 hidden_layers=self.hidden_layers,
                 num_classes=num_classes,
-                haar_padding="valid",  # use valid padding as we need to reduce patches
+                haar_padding=0,  # use valid padding as we need to reduce patches
                 use_bn=True,
                 activation=torch.nn.ReLU,
                 dropout=self.dropout,
@@ -173,7 +173,7 @@ class MakeLikelihoodFromScribblesECONetd(MyInteractiveSegmentationTransform):
                 feat_num_filters=self.num_filters,
                 hidden_layers=self.hidden_layers,
                 num_classes=num_classes,
-                feat_padding="valid",
+                feat_padding=0,  # use valid padding as we need to reduce patches
                 use_bn=True,
                 activation=torch.nn.ReLU,
                 dropout=self.dropout,
@@ -386,7 +386,7 @@ class MakeLikelihoodFromScribblesDybaORFd(MyInteractiveSegmentationTransform):
         # load haar-like feature extractor
         haar_feature_extractor = torchhaarfeatures.HaarFeatures3d(
             kernel_size=self.kernel_size,
-            padding="same",
+            padding=(self.kernel_size-1)//2,
             stride=1,
             padding_mode="zeros",
         ).to(self.device)
@@ -627,7 +627,7 @@ class ApplyGaussianSmoothing(MyInteractiveSegmentationTransform):
                 in_channels=image.shape[1],
                 kernel_size=self.kernel_size,
                 sigma=self.sigma,
-                padding="same",
+                padding=(self.kernel_size-1)//2,
                 stride=1,
                 padding_mode="zeros",
             ).to(self.device)
@@ -636,7 +636,7 @@ class ApplyGaussianSmoothing(MyInteractiveSegmentationTransform):
                 in_channels=image.shape[1],
                 kernel_size=self.kernel_size,
                 sigma=self.sigma,
-                padding="same",
+                padding=(self.kernel_size-1)//2,
                 stride=1,
                 padding_mode="zeros",
             ).to(self.device)

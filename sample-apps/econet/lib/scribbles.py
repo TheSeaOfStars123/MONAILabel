@@ -1,5 +1,7 @@
 import logging
 
+from monailabel.tasks.infer.basic_infer import BasicInferTask
+
 logger = logging.getLogger(__name__)
 
 from monai.transforms import (Compose, EnsureChannelFirstd, LoadImaged,
@@ -16,7 +18,7 @@ from lib.transforms import (AddBackgroundScribblesFromROIWithDropfracd,
                             MakeLikelihoodFromScribblesHistogramd, Timeit)
 
 
-class MyLikelihoodBasedSegmentor(InferTask):
+class MyLikelihoodBasedSegmentor(BasicInferTask):
     def __init__(
         self,
         dimension=3,
@@ -41,7 +43,7 @@ class MyLikelihoodBasedSegmentor(InferTask):
         self.lamda = lamda
         self.sigma = sigma
 
-    def pre_transforms(self):
+    def pre_transforms(self, data=None):
         return [
             LoadImaged(keys=["image", "label"]),
             EnsureChannelFirstd(keys=["image", "label"]),
@@ -49,11 +51,11 @@ class MyLikelihoodBasedSegmentor(InferTask):
             AddBackgroundScribblesFromROIWithDropfracd(
                 scribbles="label", scribbles_bg_label=2, scribbles_fg_label=3, drop_frac=0.98
             ),
-            Spacingd(
-                keys=["image", "label"],
-                pixdim=self.pix_dim,
-                mode=["bilinear", "nearest"],
-            ),
+            # Spacingd(
+            #     keys=["image", "label"],
+            #     pixdim=self.pix_dim,
+            #     mode=["bilinear", "nearest"],
+            # ),
             ScaleIntensityRanged(
                 keys="image",
                 a_min=self.intensity_range[0],
@@ -70,7 +72,7 @@ class MyLikelihoodBasedSegmentor(InferTask):
             ),
         ]
 
-    def post_transforms(self):
+    def post_transforms(self, data=None):
         return [
             ApplyGraphCutOptimisationd(
                 unary="prob",
@@ -145,7 +147,7 @@ class ECONetPlusGraphCut(MyLikelihoodBasedSegmentor):
         self.train_feat = train_feat
         self.model_path = model_path
 
-    def inferer(self):
+    def inferer(self, data=None):
         return Compose(
             [
                 Timeit(),
@@ -222,7 +224,7 @@ class DybaORFPlusGraphCut(MyLikelihoodBasedSegmentor):
         self.min_samples_split = min_samples_split
         self.model_path = model_path
 
-    def inferer(self):
+    def inferer(self, data=None):
         return Compose(
             [
                 Timeit(),
@@ -282,7 +284,7 @@ class GMMPlusGraphCut(MyLikelihoodBasedSegmentor):
         )
         self.mixture_size = mixture_size
 
-    def inferer(self):
+    def inferer(self, data=None):
         return Compose(
             [
                 Timeit(),
@@ -339,7 +341,7 @@ class HistogramPlusGraphCut(MyLikelihoodBasedSegmentor):
         self.alpha_fg = alpha_fg
         self.bins = bins
 
-    def inferer(self):
+    def inferer(self, data=None):
         return Compose(
             [
                 Timeit(),
