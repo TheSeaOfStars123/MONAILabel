@@ -12,6 +12,9 @@
 import logging
 
 import numpy as np
+from monai.utils import optional_import
+
+maxflow, has_maxflow = optional_import("maxflow")
 import numpymaxflow
 import torch
 from monai.networks.layers import GaussianMixtureModel
@@ -27,6 +30,17 @@ def maxflow(image, prob, lamda=5, sigma=0.1):
     # lamda: weight of smoothing term
     # sigma: std of intensity values
     return numpymaxflow.maxflow(image, prob, lamda, sigma)
+
+def interactive_maxflow2d(image, prob, seed, lamda=5, sigma=0.1):
+    # lamda: weight of smoothing term
+    # sigma: std of intensity values
+    return maxflow.interactive_maxflow2d(image, prob, seed, (lamda, sigma))
+
+
+def interactive_maxflow3d(image, prob, seed, lamda=5, sigma=0.1):
+    # lamda: weight of smoothing term
+    # sigma: std of intensity values
+    return maxflow.interactive_maxflow3d(image, prob, seed, (lamda, sigma))
 
 
 def make_iseg_unary(
