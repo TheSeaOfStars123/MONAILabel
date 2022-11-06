@@ -100,10 +100,10 @@ class DeepEdit(BasicTrainTask):
 
     def train_pre_transforms(self, context: Context):
         return [
-            LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            LoadImaged(keys=("image", "label")),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            # Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
             SpatialCropByRoiD(keys=["image", "label"]),
             ScaleIntensityd(keys="image"),
@@ -136,10 +136,10 @@ class DeepEdit(BasicTrainTask):
 
     def val_pre_transforms(self, context: Context):
         return [
-            LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            LoadImaged(keys=("image", "label")),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            # Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
             SpatialCropByRoiD(keys=["image", "label"]),
             ScaleIntensityd(keys="image"),
