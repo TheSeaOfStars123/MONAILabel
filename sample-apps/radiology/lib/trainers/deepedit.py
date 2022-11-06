@@ -12,7 +12,7 @@
 import logging
 
 import torch
-from lib.transforms.transforms import NormalizeLabelsInDatasetd
+from lib.transforms.transforms import NormalizeLabelsInDatasetd, SpatialCropByRoiD
 from monai.apps.deepedit.interaction import Interaction
 from monai.apps.deepedit.transforms import (
     AddGuidanceSignalDeepEditd,
@@ -38,7 +38,7 @@ from monai.transforms import (
     ScaleIntensityRanged,
     SelectItemsd,
     ToNumpyd,
-    ToTensord,
+    ToTensord, ScaleIntensityd,
 )
 
 from monailabel.deepedit.handlers import TensorBoardImageHandler
@@ -105,13 +105,15 @@ class DeepEdit(BasicTrainTask):
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
-            ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            SpatialCropByRoiD(keys=["image", "label"]),
+            ScaleIntensityd(keys="image"),
+            # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
-            Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
+            # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
@@ -139,8 +141,10 @@ class DeepEdit(BasicTrainTask):
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
-            ScaleIntensityRanged(keys=("image"), a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
-            Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
+            SpatialCropByRoiD(keys=["image", "label"]),
+            ScaleIntensityd(keys="image"),
+            # ScaleIntensityRanged(keys=("image"), a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),

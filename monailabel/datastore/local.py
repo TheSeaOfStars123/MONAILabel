@@ -494,8 +494,6 @@ class LocalDatastore(Datastore):
         label_path = self._datastore.label_path(label_tag)
         name = self._filename(image_id, label_ext)
         dest = os.path.join(label_path, name)
-        if label_info is not None:
-            label_info["dest"] = dest
 
         with FileLock(self._lock_file):
             logger.debug("Acquired the lock!")

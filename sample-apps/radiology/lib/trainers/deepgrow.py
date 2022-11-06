@@ -38,9 +38,10 @@ from monai.transforms import (
     Resized,
     SelectItemsd,
     ToNumpyd,
-    ToTensord,
+    ToTensord, ScaleIntensityd,
 )
 
+from lib.transforms.transforms import SpatialCropByRoiD
 from monailabel.interfaces.datastore import Datastore
 from monailabel.tasks.train.basic_train import BasicTrainTask, Context
 
@@ -117,9 +118,11 @@ class Deepgrow(BasicTrainTask):
         t: List[Any] = [
             LoadImaged(keys=("image", "label")),
             AddChanneld(keys=("image", "label")),
-            SpatialCropForegroundd(keys=("image", "label"), source_key="label", spatial_size=self.roi_size),
-            Resized(keys=("image", "label"), spatial_size=self.model_size, mode=("area", "nearest")),
-            NormalizeIntensityd(keys="image", subtrahend=208.0, divisor=388.0),  # type: ignore
+            SpatialCropByRoiD(keys=["image", "label"]),
+            # SpatialCropForegroundd(keys=("image", "label"), source_key="label", spatial_size=self.roi_size),
+            # Resized(keys=("image", "label"), spatial_size=self.model_size, mode=("area", "nearest")),
+            ScaleIntensityd(keys="image"),
+            # NormalizeIntensityd(keys="image", subtrahend=208.0, divisor=388.0),  # type: ignore
         ]
         if self.dimension == 3:
             t.append(FindAllValidSlicesd(label="label", sids="sids"))

@@ -22,8 +22,7 @@ from scipy.special import softmax
 
 from monailabel.transform.writer import Writer
 
-from .utils import make_iseg_unary, make_likelihood_image_gmm, make_likelihood_image_histogram, maxflow, \
-    interactive_maxflow3d, interactive_maxflow2d
+from .utils import make_iseg_unary, make_likelihood_image_gmm, make_likelihood_image_histogram, maxflow
 
 logger = logging.getLogger(__name__)
 
@@ -600,109 +599,6 @@ class ApplyCRFOptimisationd(InteractiveSegmentationTransform):
 
         return d
 
-#################################################
-# Hybrid Transforms
-# (both MakeUnary+Optimiser in single method)
-# uses SimpleCRF's interactive_maxflowNd() method
-#################################################
-class ApplyISegGraphCutPostProcd(InteractiveSegmentationTransform):
-    """
-    Transform wrapper around SimpleCRF's Interactive GraphCut MaxFlow implementation for ISeg.
-
-    This is a hybrid transform, which covers both Make*Unaryd + Optimiser and hence does not
-    need an additional optimiser.
-
-    ISeg unaries are made and resulting energy function optimised using GraphCut inside
-    SimpleCRF's interactive segmentation function.
-
-    Usage Example::
-
-        Compose(
-            [
-                ApplyISegGraphCutPostProcd(
-                    image="image",
-                    logits="logits",
-                    scribbles="label",
-                    post_proc_label="pred",
-                    scribbles_bg_label=2,
-                    scribbles_fg_label=3,
-                    lamda=10.0,
-                    sigma=15.0,
-                ),
-            ]
-        )
-    """
-
-    def __init__(
-        self,
-        image: str,
-        logits: str,
-        scribbles: str,
-        meta_key_postfix: str = "meta_dict",
-        post_proc_label: str = "pred",
-        scribbles_bg_label: int = 2,
-        scribbles_fg_label: int = 3,
-        lamda: float = 8.0,
-        sigma: float = 0.1,
-    ) -> None:
-        super().__init__(meta_key_postfix)
-        self.image = image
-        self.logits = logits
-        self.scribbles = scribbles
-        self.post_proc_label = post_proc_label
-        self.scribbles_bg_label = scribbles_bg_label
-        self.scribbles_fg_label = scribbles_fg_label
-        self.lamda = lamda
-        self.sigma = sigma
-
-    def __call__(self, data):
-        d = dict(data)
-
-        # attempt to fetch algorithmic parameters from app if present
-        self.lamda = d.get("lamda", self.lamda)
-        self.sigma = d.get("sigma", self.sigma)
-
-        # copy affine meta data from image input
-        d = self._copy_affine(d, src=self.image, dst=self.post_proc_label)
-
-        # read relevant terms from data
-        image = self._fetch_data(d, self.image)
-        logits = self._fetch_data(d, self.logits)
-        scribbles = self._fetch_data(d, self.scribbles)
-
-        # start forming user interaction input
-        scribbles = np.concatenate(
-            [scribbles == self.scribbles_bg_label, scribbles == self.scribbles_fg_label], axis=0
-        ).astype(np.uint8)
-
-        # check if input logit is compatible with GraphCut opt
-        if logits.shape[0] > 2:
-            raise ValueError(
-                "GraphCut can only be applied to binary probabilities, received {}".format(logits.shape[0])
-            )
-
-        # convert logits to probability
-        prob = self._normalise_logits(logits, axis=0)
-
-        # prepare data for SimpleCRF's Interactive GraphCut (ISeg)
-        image = np.moveaxis(image, source=0, destination=-1)
-        prob = np.moveaxis(prob, source=0, destination=-1)
-        scribbles = np.moveaxis(scribbles, source=0, destination=-1)
-
-        # run GraphCut
-        spatial_dims = image.ndim - 1
-        run_3d = spatial_dims == 3
-        if run_3d:
-            post_proc_label = interactive_maxflow3d(image, prob, scribbles, lamda=self.lamda, sigma=self.sigma)
-        else:
-            # 2D is not yet tested within this framework
-            post_proc_label = interactive_maxflow2d(image, prob, scribbles, lamda=self.lamda, sigma=self.sigma)
-
-        post_proc_label = np.expand_dims(post_proc_label, axis=0).astype(np.float32)
-        d[self.post_proc_label] = post_proc_label
-
-        return d
-
 #######################
 #######################
 
@@ -718,8 +614,8 @@ class WriteLogits(Transform):
     def __call__(self, data):
         data = dict(data)
         d = copy.deepcopy(data)
-        d["result_write_to_file"] = False
-        d['label'] = ['mass1']
+        d["result_write_to_file"] = True
+        d['labels'] = ['mass1']
         writer = Writer(label=self.key, nibabel=True)
 
         file, _ = writer(d)

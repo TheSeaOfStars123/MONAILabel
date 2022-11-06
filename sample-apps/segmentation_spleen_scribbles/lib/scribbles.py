@@ -53,7 +53,7 @@ class SpleenPostProc(BasicInferTask):
             AddChanneld(keys=["image", "label"]),
             # at the moment optimisers are bottleneck taking a long time,
             # therefore scaling non-isotropic with big spacing
-            Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
+            # Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
             ScaleIntensityRanged(
                 keys="image",
                 a_min=self.intensity_range[0],
@@ -104,7 +104,7 @@ class SpleenISegCRF(SpleenPostProc):
             AddChanneld(keys=["image", "label"]),
             # at the moment optimisers are bottleneck taking a long time,
             # therefore scaling non-isotropic with big spacing
-            Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
+            # Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
             ScaleIntensityRanged(
                 keys="image",
                 a_min=self.intensity_range[0],

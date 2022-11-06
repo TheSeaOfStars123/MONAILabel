@@ -155,13 +155,10 @@ class MyApp(MONAILabelApp):
 
         # save logits
         logits = result_params.get("logits")
-        label_info = {}
-        if logits is not None and self._infers[request.get("model")].type == InferType.SEGMENTATION:
-            logits_path = result.get('label')
-            self.datastore().add_image(image, )
-            self.datastore().save_label(image, logits_path,"logits", label_info)
-            # os.unlink(logits_path)
-            result['label'] = label_info['dest']
+        if logits and self._infers[request.get("model")].type == InferType.SEGMENTATION:
+            self.datastore().save_label(image, logits, "logits", {})
+            os.unlink(logits)
+            # result['label'] = label_info['dest']
             # result['file'] = label_info['dest'] # return file path to slicer
         result_params.pop("logits", None)
         logger.info(f"Final Result: {result}")

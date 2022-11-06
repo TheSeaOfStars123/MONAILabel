@@ -66,7 +66,7 @@ class Deepgrow3D(TaskConfig):
             labels=self.labels,
             preload=strtobool(self.conf.get("preload", "false")),
             dimension=3,
-            model_size=(128, 192, 192),
+            model_size=(128, 128, 48),
             config={"cache_transforms": True, "cache_transforms_in_memory": True, "cache_transforms_ttl": 300},
         )
         return task
@@ -83,8 +83,8 @@ class Deepgrow3D(TaskConfig):
             description="Train 3D Deepgrow model",
             dimension=3,
             labels=self.labels,
-            roi_size=(128, 192, 192),
-            model_size=(128, 192, 192),
+            roi_size=(128, 128, 48),
+            model_size=(128, 128, 48),
             max_train_interactions=15,
             max_val_interactions=10,
             val_interval=5,

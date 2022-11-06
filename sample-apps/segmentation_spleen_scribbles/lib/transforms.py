@@ -36,7 +36,7 @@ class MakeMIDeepEGDUnaryd(InteractiveSegmentationTransform):
         spacing = None
         src_key = "_".join([key, self.meta_key_postfix])
         if src_key in d.keys() and "affine" in d[src_key]:
-            spacing = (np.sqrt(np.sum(np.square(d[src_key]["affine"]), 0))[
+            spacing = (np.sqrt(np.sum(np.square(d[src_key]["affine"]).numpy(), 0))[
                        :-1]).astype(np.float32)
 
         return spacing
