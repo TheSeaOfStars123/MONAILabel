@@ -279,7 +279,7 @@ class BasicTrainTask(TrainTask):
         return self._dataloader(context, dataset, context.val_batch_size, num_workers)
 
     def val_pre_transforms(self, context: Context):
-        return self.train_pre_transforms(context)
+        return self.val_pre_transforms(context)
 
     def val_post_transforms(self, context: Context):
         return self.train_post_transforms(context)

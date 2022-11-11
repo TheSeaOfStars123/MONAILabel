@@ -14,6 +14,8 @@ import logging
 import os
 from typing import Dict
 
+import pandas as pd
+
 import lib.configs
 from lib.activelearning import Last
 from lib.infers.deepgrow_pipeline import InferDeepgrowPipeline
@@ -30,6 +32,7 @@ from monailabel.interfaces.tasks.train import TrainTask
 from monailabel.scribbles.infer import GMMBasedGraphCut, HistogramBasedGraphCut
 from monailabel.tasks.activelearning.first import First
 from monailabel.tasks.activelearning.random import Random
+from monailabel.tasks.train.basic_train import Context
 from monailabel.utils.others.class_utils import get_class_names
 from monailabel.utils.others.generic import strtobool
 from monailabel.utils.others.planner import HeuristicPlanner
@@ -227,6 +230,25 @@ class MyApp(MONAILabelApp):
         return methods
 
 
+    def breast_partition_datalist(self):
+        default_prefix = 'D:/Desktop/BREAST/BREAST/'
+        name_mapping_path = default_prefix + 'breast-dataset-training-validation/Breast_meta_data/breast_name_mapping.csv'
+        val_datalist = []
+        train_datalist = []
+        name_mapping_df = pd.read_csv(name_mapping_path, encoding='unicode_escape')
+        for idx, data in name_mapping_df.iterrows():
+            if data['Exclude'] != 1.0:
+                image_id = data['Breast_subject_ID'] + '_ph3'
+                file = {}
+                file['image'] = self._datastore.get_image_uri(image_id)
+                file['label'] = self._datastore.get_label_uri(image_id, "final")
+                if file['image'] != "" and file['label'] != "":
+                    if data['val_datalist'] == 1.0:
+                        val_datalist.append(file)
+                    else:
+                        train_datalist.append(file)
+        return train_datalist, val_datalist
+
 """
 Example to run train/infer/scoring task(s) locally without actually running MONAI Label Server
 """
@@ -254,8 +276,8 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--studies", default=studies)
-    parser.add_argument("-m", "--model", default="segmentation_spleen")
-    parser.add_argument("-t", "--test", default="infer", choices=("train", "infer"))
+    parser.add_argument("-m", "--model", default="segmentation_breast")
+    parser.add_argument("-t", "--test", default="infer", choices=("train", "infer", "scoring"))
     args = parser.parse_args()
 
     app_dir = os.path.dirname(__file__)
@@ -263,48 +285,81 @@ def main():
     conf = {
         "models": args.model,
         "preload": "false",
+        "skip_scoring": "false",
     }
 
     app = MyApp(app_dir, studies, conf)
 
     # Infer
     if args.test == "infer":
-        sample = app.next_sample(request={"strategy": "first"})
-        image_id = sample["id"]
-        image_path = sample["path"]
+        for image_id in app._datastore.list_images():
+            # sample = app.next_sample(request={"strategy": "first"})
+            # image_id = sample["id"]
+            image_path = app._datastore.get_image_uri(image_id)
 
-        # Run on all devices
-        for device in device_list():
-            # res = app.infer(request={"model": args.model, "image": image_id, "device": device})
-            res = app.infer(
-                request={"model": "vertebra_pipeline", "image": image_id, "device": device, "slicer": False}
-            )
-            label = res["file"]
-            label_json = res["params"]
-            test_dir = os.path.join(args.studies, "test_labels")
-            os.makedirs(test_dir, exist_ok=True)
+            # Run on all devices
+            for device in device_list():
+                res = app.infer(
+                    request={
+                        "model": args.model,
+                        "image": image_id,
+                        "device": device
+                    }
+                )
+                # res = app.infer(
+                #     request={"model": "vertebra_pipeline", "image": image_id, "device": device, "slicer": False}
+                # )
+                label = res["file"]
+                label_json = res["params"]
+                test_dir = os.path.join(args.studies, "test_labels")
+                os.makedirs(test_dir, exist_ok=True)
 
-            label_file = os.path.join(test_dir, image_id + file_ext(image_path))
-            shutil.move(label, label_file)
+                label_file = os.path.join(test_dir, image_id + file_ext(image_path))
+                shutil.move(label, label_file)
 
-            print(label_json)
-            print(f"++++ Image File: {image_path}")
-            print(f"++++ Label File: {label_file}")
-            break
+                print(label_json)
+                print(f"++++ Image File: {image_path}")
+                print(f"++++ Label File: {label_file}")
         return
 
     # Train
-    app.train(
-        request={
-            "model": args.model,
-            "max_epochs": 20,
-            "dataset": "Dataset",  # PersistentDataset, CacheDataset
-            "train_batch_size": 2,
-            "val_batch_size": 1,
-            "multi_gpu": False,
-            "val_split": 0.1,
-        },
-    )
+    if args.test == "train":
+        # 数据集划分
+        train_ds, val_ds = app.breast_partition_datalist()
+        train_ds_json = "D:\Desktop\MONAILabel_datasets1/breast_train_ds.json"
+        val_ds_json = "D:\Desktop\MONAILabel_datasets1/breast_val_ds.json"
+        with open(train_ds_json, "w") as fp:
+            json.dump(train_ds, fp, indent=2)
+        with open(val_ds_json, "w") as fp:
+            json.dump(val_ds, fp, indent=2)
+
+        app.train(
+            request={
+                "model": args.model,
+                "max_epochs": 20,
+                "dataset": "Dataset",  # PersistentDataset, CacheDataset
+                "train_batch_size": 4,
+                "val_batch_size": 1,
+                "multi_gpu": False,
+                "val_split": 0.1,
+                "train_ds": train_ds_json,
+                "val_ds": val_ds_json,
+            },
+        )
+        return
+
+    # Validation
+    if args.test == "scoring":
+        res = app.scoring(
+            request={
+                "method": "dice",
+                "y": "labels_crop_human",
+                "y_pred": "test_labels_human",
+            }
+        )
+        print(res)
+        logger.info("All Done!")
+        return
 
 
 if __name__ == "__main__":

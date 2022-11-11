@@ -13,6 +13,7 @@ import logging
 
 import numpy as np
 import torch
+from monai.metrics import compute_dice, DiceMetric
 from monai.transforms import LoadImage
 
 from monailabel.interfaces.datastore import Datastore, DefaultLabelTag
@@ -44,6 +45,13 @@ class Dice(ScoringMethod):
                 y = loader(datastore.get_label_uri(y_i, tag_y))
                 y_pred = loader(datastore.get_label_uri(y_pred_i, tag_y_pred))
 
+                # compute metric for current iteration
+                dice_metric = DiceMetric(include_background=True, reduction="mean")
+                dice_metric(y_pred=y_pred, y=y)
+                metric = dice_metric.aggregate().item()
+                # reset the status for next validation round
+                dice_metric.reset()
+
                 y = y.flatten()
                 if isinstance(y, torch.Tensor):
                     y = y.numpy()
@@ -53,7 +61,9 @@ class Dice(ScoringMethod):
                 union = np.sum(y) + np.sum(y_pred)
                 dice = 2.0 * np.sum(y * y_pred) / union if union != 0 else 1
 
+
                 logger.info(f"Dice Score for {image_id} is {dice}")
+                logger.info(f"DiceMonai Score for {image_id} is {metric}")
                 datastore.update_image_info(image_id, {"dice": dice})
                 result[image_id] = dice
         return result

@@ -153,6 +153,14 @@ class Datastore(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def get_images(self) -> List[str]:
+        """
+        Get all images
+        By zyc
+        """
+        pass
+
+    @abstractmethod
     def get_labeled_images(self) -> List[str]:
         """
         Get all images that have a corresponding final label

@@ -348,6 +348,13 @@ class LocalDatastore(Datastore):
         info: Dict[str, Any] = label.info if label else {}
         return info
 
+    def get_images(self) -> List[str]:
+        """
+        By zyc
+        Get all images
+        """
+        return [k for k, v in self._datastore.objects.items()]
+
     def get_labeled_images(self) -> List[str]:
         """
         Get all images that have a corresponding label

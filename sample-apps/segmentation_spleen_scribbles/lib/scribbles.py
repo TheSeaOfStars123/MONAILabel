@@ -16,7 +16,6 @@ from monailabel.interfaces.tasks.infer import InferTask, InferType
 from monailabel.scribbles.transforms import (
     ApplyCRFOptimisationd,
     ApplyGraphCutOptimisationd,
-    ApplyISegGraphCutPostProcd,
     MakeISegUnaryd,
     SoftenProbSoftmax,
 )
@@ -226,47 +225,6 @@ class SpleenMIDeepSeg(SpleenPostProc):
                     post_proc_label="pred",
                     lamda=5.0,
                     sigma=0.1,
-                ),
-            ]
-        )
-
-
-class SpleenInteractiveGraphCut(SpleenPostProc):
-    """
-    Defines ISeg+GraphCut based post processing task for Spleen segmentation from the following paper:
-
-    Wang, Guotai, et al. "Interactive medical image segmentation using deep learning with image-specific fine tuning."
-    IEEE transactions on medical imaging 37.7 (2018): 1562-1573. (preprint: https://arxiv.org/pdf/1710.04043.pdf)
-
-    This task takes as input 1) original image volume 2) logits from model and 3) scribbles from user
-    indicating corrections for initial segmentation from model. User-scribbles are incorporated using
-    Equation 7 on page 4 of the paper.
-
-    SimpleCRF's interactive GraphCut MaxFlow is used to optimise Equation 5 from the paper,
-    where unaries come from Equation 7 and pairwise is the original input volume.
-    """
-
-    def __init__(
-        self,
-        dimension=3,
-        description="A post processing step with SimpleCRF's Interactive ISeg GraphCut for Spleen segmentation",
-        intensity_range=(-300, 200, 0.0, 1.0, True),
-        pix_dim=(2.5, 2.5, 5.0),
-    ):
-        super().__init__(dimension, description, intensity_range, pix_dim)
-
-    def inferer(self, data=None):
-        return Compose(
-            [
-                ApplyISegGraphCutPostProcd(
-                    image="image",
-                    logits="logits",
-                    scribbles="label",
-                    post_proc_label="pred",
-                    scribbles_bg_label=2,
-                    scribbles_fg_label=3,
-                    lamda=10.0,
-                    sigma=15.0,
                 ),
             ]
         )

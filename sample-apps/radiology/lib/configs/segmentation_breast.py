@@ -1,8 +1,3 @@
-# @Time : 2022/10/20 9:27 PM 
-# @Author : zyc
-# @File : segmentation_breast.py 
-# @Title :
-# @Description :
 import logging
 import os
 from distutils.util import strtobool
@@ -14,7 +9,10 @@ from monai.networks.nets import UNet
 
 from monailabel.interfaces.config import TaskConfig
 from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.scoring import ScoringMethod
 from monailabel.interfaces.tasks.train import TrainTask
+from monailabel.tasks.scoring.dice import Dice
+from monailabel.tasks.scoring.sum import Sum
 from monailabel.utils.others.generic import download_file
 
 logger = logging.getLogger(__name__)
@@ -84,3 +82,10 @@ class SegmentationBreast(TaskConfig):
             labels=self.labels,
         )
         return task
+
+    def scoring_method(self) -> Union[None, ScoringMethod, Dict[str, ScoringMethod]]:
+        methods: Dict[str, ScoringMethod] = {
+            "dice": Dice(),
+            "sum": Sum(),
+        }
+        return methods

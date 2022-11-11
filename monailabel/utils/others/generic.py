@@ -46,6 +46,14 @@ def remove_file(path: str) -> None:
         else:
             os.unlink(path)
 
+def get_headname(path):
+    """
+    Gets the headname of a file.
+    By zyc
+    """
+    head, tail = os.path.split(path)
+    return head
+
 
 def get_basename(path):
     """Gets the basename of a file.

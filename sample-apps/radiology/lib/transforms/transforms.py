@@ -10,6 +10,8 @@
 # limitations under the License.
 import copy
 import logging
+import os
+import shutil
 from typing import Dict, Hashable, Mapping
 
 import numpy as np
@@ -18,6 +20,9 @@ from monai.config import KeysCollection, NdarrayOrTensor
 from monai.transforms import CropForeground, GaussianSmooth, Randomizable, Resize, ScaleIntensity, SpatialCrop
 from monai.transforms.transform import MapTransform, Transform
 from scipy import ndimage
+
+from monailabel.transform.writer import Writer
+from monailabel.utils.others.generic import file_ext, get_basename_no_ext, get_headname
 
 logger = logging.getLogger(__name__)
 
@@ -589,3 +594,21 @@ class SpatialCropByRoiD(MapTransform):
             d[key] = crop(img)
             logger.info("Processing label: " + d["label_meta_dict"]["filename_or_obj"] + "->" + str(d["label"].shape))
         return d
+
+class WriteCrop(MapTransform):
+    def __init__(self, keys: KeysCollection, location_tag: KeysCollection):
+        super().__init__(keys)
+        self.location_tag = location_tag
+
+    def __call__(self, data):
+        for key, tag in zip(self.keys, self.location_tag):
+            writer = Writer(label=key, nibabel=True)
+            file, _ = writer(data)
+            image_path = data.get('image_path')
+            studies_path = get_headname(image_path)
+            image_id = get_basename_no_ext(image_path)
+            des_dir = os.path.join(studies_path, tag)
+            os.makedirs(des_dir, exist_ok=True)
+            label_file = os.path.join(des_dir, image_id + file_ext(image_path))
+            shutil.move(file, label_file)
+        return data

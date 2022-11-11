@@ -12,6 +12,6 @@
 from .activelearning import MyStrategy
 # from .infer import SegmentationWithWriteLogits
 from .infer import SegmentationBreastWithWriteLogits
-from .scribbles import SpleenInteractiveGraphCut, SpleenISegCRF, SpleenISegGraphCut, SpleenMIDeepSeg
+from .scribbles import SpleenISegCRF, SpleenISegGraphCut, SpleenMIDeepSeg
 # from .train import MyTrain
 from .train import mySegmentationBreastWithWriteLogits

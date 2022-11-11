@@ -1,8 +1,3 @@
-# @Time : 2022/10/20 10:02 PM
-# @Author : zyc
-# @File : segmentation_breast.py
-# @Title :
-# @Description :
 import logging
 
 import torch
@@ -65,13 +60,10 @@ class SegmentationBreast(BasicTrainTask):
         return [
             LoadImaged(keys=("image", "label")),
             EnsureChannelFirstd(keys=("image", "label")),
-            Spacingd(
-                keys=("image", "label"),
-                pixdim=(1.0, 1.0, 1.0),
-                mode=("bilinear", "nearest"),
-            ),
             ScaleIntensityd(keys="image"),
             EnsureTyped(keys=("image", "label"), device=context.device),
+            SpatialCropByRoiD(keys=["image", "label"]),
+            SelectItemsd(keys=("image", "label")),
         ]
 
     def val_inferer(self, context: Context):

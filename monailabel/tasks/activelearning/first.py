@@ -26,7 +26,9 @@ class First(Strategy):
         super().__init__("Get First Sample")
 
     def __call__(self, request, datastore: Datastore):
-        images = datastore.get_unlabeled_images()
+        # fist 图像策略 zyc
+        # images = datastore.get_unlabeled_images()
+        images = datastore.get_images()
         if not len(images):
             return None
 

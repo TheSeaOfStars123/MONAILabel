@@ -1,13 +1,9 @@
-# @Time : 2022/10/20 10:01 PM 
-# @Author : zyc
-# @File : segmentation_breast.py 
-# @Title :
-# @Description :
 from typing import Sequence, Callable
 
 from monai.transforms import LoadImaged, EnsureChannelFirstd, ScaleIntensityRanged, ScaleIntensityd, EnsureTyped, \
-    Activationsd, AsDiscreted, ToNumpyd, Spacingd
+    Activationsd, AsDiscreted, ToNumpyd, Spacingd, SelectItemsd, ToTensord, SqueezeDimd
 
+from lib.transforms.transforms import SpatialCropByRoiD, WriteCrop
 from monailabel.interfaces.tasks.infer import InferTask, InferType
 from monailabel.transform.post import Restored, BoundingBoxd
 
@@ -42,20 +38,33 @@ class SegmentationBreast(InferTask):
 
     def pre_transforms(self, data=None) -> Sequence[Callable]:
          return [
-            LoadImaged(keys="image", reader="ITKReader"),
-            EnsureChannelFirstd(keys="image"),
-            # Spacingd(keys="image", pixdim=self.target_spacing),
-            # Orientationd(keys="image", axcodes="RAS"),
+             # LoadImaged(keys="image", reader="ITKReader"),
+             # EnsureChannelFirstd(keys="image"),
+             # # Spacingd(keys="image", pixdim=self.target_spacing),
+             # # Orientationd(keys="image", axcodes="RAS"),
+             # ScaleIntensityd(keys="image"),
+             # EnsureTyped(keys="image"),
+            LoadImaged(keys=("image", "label")),
+            EnsureChannelFirstd(keys=("image", "label")),
             ScaleIntensityd(keys="image"),
             EnsureTyped(keys="image"),
+            SpatialCropByRoiD(keys=["image", "label"]),
         ]
 
     def post_transforms(self, data=None) -> Sequence[Callable]:
         return [
-            EnsureTyped(keys="pred", device=data.get("device") if data else None),
+            # ApplyGraphCutOptimisationd(unary="pred",
+            #                            pairwise="image",
+            #                            post_proc_label="pred",
+            #                            lamda=8.0,
+            #                            sigma=0.1),
+            EnsureTyped(keys="pred", device=data.get("device") if data else None),  # pred:(2, 128, 128, 48)
             Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True),
+            AsDiscreted(keys="pred", argmax=True),  # pred:(1, 128, 128, 48)
+            # SqueezeDimd(keys="pred", dim=0),  # pred:(128, 128, 48)
             ToNumpyd(keys="pred"),
-            Restored(keys="pred", ref_image="image"),
-            BoundingBoxd(keys="pred", result="result", bbox="bbox"),
+            # writer前必须要使用restore
+            Restored(keys=["image", "label", "pred"], ref_image="image"),
+            WriteCrop(keys=["image", "label"], location_tag=["images_crop", "labels_crop"])
+            # BoundingBoxd(keys="pred", result="result", bbox="bbox"),
         ]
