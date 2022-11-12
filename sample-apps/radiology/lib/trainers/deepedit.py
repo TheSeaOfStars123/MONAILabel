@@ -23,7 +23,7 @@ from monai.apps.deepedit.transforms import (
     SplitPredsLabeld,
 )
 from monai.handlers import MeanDice, from_engine
-from monai.inferers import SimpleInferer
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.transforms import (
     Activationsd,
@@ -105,15 +105,15 @@ class DeepEdit(BasicTrainTask):
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
             # Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
-            SpatialCropByRoiD(keys=["image", "label"]),
-            ScaleIntensityd(keys="image"),
             # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
+            # RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
             # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
+            SpatialCropByRoiD(keys=("image", "label")),
+            ScaleIntensityd(keys="image"),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
@@ -141,10 +141,10 @@ class DeepEdit(BasicTrainTask):
             NormalizeLabelsInDatasetd(keys="label", label_names=self._labels),
             # Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
-            SpatialCropByRoiD(keys=["image", "label"]),
-            ScaleIntensityd(keys="image"),
             # ScaleIntensityRanged(keys=("image"), a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
+            SpatialCropByRoiD(keys=["image", "label"]),
+            ScaleIntensityd(keys="image"),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
@@ -155,7 +155,8 @@ class DeepEdit(BasicTrainTask):
         ]
 
     def val_inferer(self, context: Context):
-        return SimpleInferer()
+        # return SimpleInferer()
+        return SlidingWindowInferer(roi_size=(128, 128, 64), sw_batch_size=1, overlap=0.25)
 
     def train_iteration_update(self, context: Context):
         return Interaction(

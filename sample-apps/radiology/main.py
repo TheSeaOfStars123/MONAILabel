@@ -231,8 +231,10 @@ class MyApp(MONAILabelApp):
 
 
     def breast_partition_datalist(self):
-        default_prefix = 'D:/Desktop/BREAST/BREAST/'
-        name_mapping_path = default_prefix + 'breast-dataset-training-validation/Breast_meta_data/breast_name_mapping.csv'
+        # default_prefix = 'D:/Desktop/BREAST/BREAST/'
+        # default_prefix = '/Users/zyc/Desktop'
+        # name_mapping_path = default_prefix + 'breast-dataset-training-validation/Breast_meta_data/breast_name_mapping.csv'
+        name_mapping_path = os.path.join(os.path.dirname(__file__), 'breast_name_mapping.csv')
         val_datalist = []
         train_datalist = []
         name_mapping_df = pd.read_csv(name_mapping_path, encoding='unicode_escape')
@@ -326,8 +328,8 @@ def main():
     if args.test == "train":
         # 数据集划分
         train_ds, val_ds = app.breast_partition_datalist()
-        train_ds_json = "D:\Desktop\MONAILabel_datasets1/breast_train_ds.json"
-        val_ds_json = "D:\Desktop\MONAILabel_datasets1/breast_val_ds.json"
+        train_ds_json = os.path.join(studies, 'breast_train_ds.json')
+        val_ds_json = os.path.join(studies, 'breast_val_ds.json')
         with open(train_ds_json, "w") as fp:
             json.dump(train_ds, fp, indent=2)
         with open(val_ds_json, "w") as fp:
