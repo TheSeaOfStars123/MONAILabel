@@ -182,7 +182,8 @@ class DeepEdit(TaskConfig):
             number_intensity_ch=self.number_intensity_ch,
             config={"pretrained": strtobool(self.conf.get("use_pretrained_model", "true"))},
             labels=self.labels,
-            debug_mode=False,
+            deepgrow_probability_train=0.8,
+            debug_mode=True,
             find_unused_parameters=True,
         )
         return task

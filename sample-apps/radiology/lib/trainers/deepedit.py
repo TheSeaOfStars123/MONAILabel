@@ -106,6 +106,7 @@ class DeepEdit(BasicTrainTask):
             # Orientationd(keys=["image", "label"], axcodes="RAS"),
             # This transform may not work well for MR images
             # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            ScaleIntensityd(keys="image"),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
@@ -113,7 +114,6 @@ class DeepEdit(BasicTrainTask):
             # RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
             # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
             SpatialCropByRoiD(keys=("image", "label")),
-            ScaleIntensityd(keys="image"),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
@@ -143,8 +143,8 @@ class DeepEdit(BasicTrainTask):
             # This transform may not work well for MR images
             # ScaleIntensityRanged(keys=("image"), a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
-            SpatialCropByRoiD(keys=["image", "label"]),
             ScaleIntensityd(keys="image"),
+            SpatialCropByRoiD(keys=["image", "label"]),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
@@ -155,8 +155,8 @@ class DeepEdit(BasicTrainTask):
         ]
 
     def val_inferer(self, context: Context):
-        # return SimpleInferer()
-        return SlidingWindowInferer(roi_size=(128, 128, 64), sw_batch_size=1, overlap=0.25)
+        return SimpleInferer()
+        # return SlidingWindowInferer(roi_size=(128, 128, 64), sw_batch_size=1, overlap=0.25)
 
     def train_iteration_update(self, context: Context):
         return Interaction(
