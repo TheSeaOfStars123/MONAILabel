@@ -37,6 +37,9 @@ class Dice(ScoringMethod):
         tag_y_pred = request.get("y_pred", DefaultLabelTag.ORIGINAL)
 
         result = {}
+        sum = 0
+        i = 0
+        dice_metric = DiceMetric(include_background=True, reduction="mean")
         for image_id in datastore.list_images():
             y_i = datastore.get_label_by_image_id(image_id, tag_y) if tag_y else None
             y_pred_i = datastore.get_label_by_image_id(image_id, tag_y_pred) if tag_y_pred else None
@@ -44,14 +47,8 @@ class Dice(ScoringMethod):
             if y_i and y_pred_i:
                 y = loader(datastore.get_label_uri(y_i, tag_y))
                 y_pred = loader(datastore.get_label_uri(y_pred_i, tag_y_pred))
-
                 # compute metric for current iteration
-                dice_metric = DiceMetric(include_background=True, reduction="mean")
                 dice_metric(y_pred=y_pred, y=y)
-                metric = dice_metric.aggregate().item()
-                # reset the status for next validation round
-                dice_metric.reset()
-
                 y = y.flatten()
                 if isinstance(y, torch.Tensor):
                     y = y.numpy()
@@ -60,10 +57,15 @@ class Dice(ScoringMethod):
                     y_pred = y_pred.numpy()
                 union = np.sum(y) + np.sum(y_pred)
                 dice = 2.0 * np.sum(y * y_pred) / union if union != 0 else 1
-
-
                 logger.info(f"Dice Score for {image_id} is {dice}")
-                logger.info(f"DiceMonai Score for {image_id} is {metric}")
+                sum += dice
+                i+=1
                 datastore.update_image_info(image_id, {"dice": dice})
                 result[image_id] = dice
+        # aggregate the final mean dice result
+        metric = dice_metric.aggregate().item()
+        # reset the status for next validation round
+        dice_metric.reset()
+        logger.info(f"Avg Dice Score is {sum / i}")
+        logger.info(f"Avg DiceMonai Score is {metric}")
         return result

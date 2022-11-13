@@ -288,6 +288,7 @@ def main():
         "models": args.model,
         "preload": "false",
         "skip_scoring": "false",
+        "network": "unetr"
     }
 
     app = MyApp(app_dir, studies, conf)

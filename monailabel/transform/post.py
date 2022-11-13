@@ -124,8 +124,8 @@ class Restored(MapTransform):
             # if np.any(np.not_equal(current_size, spatial_size)):
             #     resizer = Resize(spatial_size=spatial_size, mode=self.mode[idx])
             #     result = resizer(result, mode=self.mode[idx], align_corners=self.align_corners[idx])
-
-            d[key] = result if len(result.shape) <= 3 else result[0] if result.shape[0] == 1 else result
+            # d[key] = result if len(result.shape) <= 3 else result[0] if result.shape[0] == 1 else result
+            d[key] = result if result.shape[0] == 1 else result
 
             meta = d.get(f"{key}_{self.meta_key_postfix}")
             if meta is None:

@@ -119,10 +119,17 @@ class TensorBoardImageHandler:
 
         """
         step = self.global_iter_transform(engine.state.iteration)
+        # filename = (
+        #     self.batch_transform(engine.state.batch)[0]["image_meta_dict"]["filename_or_obj"]
+        #     .split("/")[-1]
+        #     .split(".")[0]
+        # )
+        # zyc
+        self.batch_transform(engine.state.batch)
         filename = (
-            self.batch_transform(engine.state.batch)[0]["image_meta_dict"]["filename_or_obj"]
-            .split("/")[-1]
-            .split(".")[0]
+            engine.state.dataloader.dataset.data[0].get('image')
+                .split("\\")[-1]
+                .split(".")[0]
         )
 
         input_tensor = self.batch_transform(engine.state.batch)[0]["image"]
