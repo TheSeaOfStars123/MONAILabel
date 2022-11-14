@@ -4,11 +4,12 @@ from monai.transforms import LoadImaged, EnsureChannelFirstd, ScaleIntensityRang
     Activationsd, AsDiscreted, ToNumpyd, Spacingd, SelectItemsd, ToTensord, SqueezeDimd
 
 from lib.transforms.transforms import SpatialCropByRoiD, WriteCrop
-from monailabel.interfaces.tasks.infer import InferTask, InferType
+from monailabel.interfaces.tasks.infer import InferType
+from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import Restored, BoundingBoxd
 
 
-class SegmentationBreast(InferTask):
+class SegmentationBreast(BasicInferTask):
     def __init__(
         self,
         path,
@@ -58,13 +59,17 @@ class SegmentationBreast(InferTask):
             #                            post_proc_label="pred",
             #                            lamda=8.0,
             #                            sigma=0.1),
-            EnsureTyped(keys="pred", device=data.get("device") if data else None),  # pred:(2, 128, 128, 48)
+            EnsureTyped(keys="pred", device=data.get("device") if data else None),  # pred:(2, 128, 128, 48)  label:(1, 128, 128, 48)
             Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True),  # pred:(1, 128, 128, 48)
-            # SqueezeDimd(keys="pred", dim=0),  # pred:(128, 128, 48)
+            AsDiscreted(keys=("pred", "label"), argmax=(True, False), to_onehot=(2, 2)),  # label:(2, 128, 128, 48)
+            EnsureChannelFirstd(keys=("label", "pred")),  # pred:(1, 2, 128, 128, 48)  label:(1, 2, 128, 128, 48)
             ToNumpyd(keys="pred"),
             # writer前必须要使用restore
             Restored(keys=["image", "label", "pred"], ref_image="image"),
-            WriteCrop(keys=["image", "label"], location_tag=["images_crop", "labels_crop"])
+            WriteCrop(keys=["image", "label", "pred"], location_tag=["images_crop", "labels_crop_monai", "test_labels_monai"]),
+            SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(2, 128, 128, 48) label:(2, 128, 128, 48)
+            AsDiscreted(keys=("pred", "label"), argmax=True),  # pred:(1, 128, 128, 48) label:(1, 128, 128, 48)
+            SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(128, 128, 48) label:(128, 128, 48)
+            WriteCrop(keys=["label"], location_tag=["labels_crop"]),
             # BoundingBoxd(keys="pred", result="result", bbox="bbox"),
         ]

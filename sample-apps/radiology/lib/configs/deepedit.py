@@ -44,7 +44,7 @@ class DeepEdit(TaskConfig):
 
         # # Multilabel
         # self.labels = {
-        #     "spleen": 1,
+        #     "mass": 1,
         #     "right kidney": 2,
         #     "left kidney": 3,
         #     "liver": 6,
@@ -72,7 +72,7 @@ class DeepEdit(TaskConfig):
         ]
 
         # Download PreTrained Model
-        if strtobool(self.conf.get("use_pretrained_model", "true")):
+        if strtobool(self.conf.get("use_pretrained_model", "false")):
             url = f"{self.conf.get('pretrained_path', self.PRE_TRAINED_PATH)}/deepedit_{network}_multilabel.pt"
             download_file(url, self.path[0])
 
