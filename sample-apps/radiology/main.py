@@ -341,7 +341,7 @@ def main():
                 "model": args.model,
                 "max_epochs": 20,
                 "dataset": "Dataset",  # PersistentDataset, CacheDataset
-                "train_batch_size": 2,
+                "train_batch_size": 4,
                 "val_batch_size": 1,
                 "multi_gpu": True,
                 "val_split": 0.1,
