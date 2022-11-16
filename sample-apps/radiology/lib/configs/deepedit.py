@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Union
 
 import lib.infers
 import lib.trainers
-from monai.networks.nets import UNETR, DynUNet
+from monai.networks.nets import UNETR, DynUNet, UNet
 
 from monailabel.interfaces.config import TaskConfig
 from monailabel.interfaces.tasks.infer_v2 import InferTask, InferType
@@ -80,33 +80,42 @@ class DeepEdit(TaskConfig):
         self.spatial_size = (128, 128, 48)  # train input size
 
         # Network
-        self.network = (
-            UNETR(
+        if network == "unetr":
+            self.network = UNETR(
+                    spatial_dims=3,
+                    in_channels=len(self.labels) + self.number_intensity_ch,
+                    out_channels=len(self.labels),
+                    img_size=self.spatial_size,
+                    feature_size=64,
+                    hidden_size=1536,
+                    mlp_dim=3072,
+                    num_heads=48,
+                    pos_embed="conv",
+                    norm_name="instance",
+                    res_block=True,
+                )
+        elif network == "dynunet":
+            self.network = DynUNet(
+                    spatial_dims=3,
+                    in_channels=len(self.labels) + self.number_intensity_ch,
+                    out_channels=len(self.labels),
+                    kernel_size=[3, 3, 3, 3, 3, 3],
+                    strides=[1, 2, 2, 2, 2, [2, 2, 1]],
+                    upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
+                    norm_name="instance",
+                    deep_supervision=False,
+                    res_block=True,
+                )
+        elif network == 'unet':
+            self.network = UNet(
                 spatial_dims=3,
                 in_channels=len(self.labels) + self.number_intensity_ch,
                 out_channels=len(self.labels),
-                img_size=self.spatial_size,
-                feature_size=64,
-                hidden_size=1536,
-                mlp_dim=3072,
-                num_heads=48,
-                pos_embed="conv",
-                norm_name="instance",
-                res_block=True,
+                channels=[16, 32, 64, 128, 256],
+                strides=[2, 2, 2, 2],
+                num_res_units=2,
+                norm="batch",
             )
-            if network == "unetr"
-            else DynUNet(
-                spatial_dims=3,
-                in_channels=len(self.labels) + self.number_intensity_ch,
-                out_channels=len(self.labels),
-                kernel_size=[3, 3, 3, 3, 3, 3],
-                strides=[1, 2, 2, 2, 2, [2, 2, 1]],
-                upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
-                norm_name="instance",
-                deep_supervision=False,
-                res_block=True,
-            )
-        )
 
         self.network_with_dropout = (
             UNETR(

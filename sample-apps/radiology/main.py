@@ -288,7 +288,7 @@ def main():
         "models": args.model,
         "preload": "false",
         "skip_scoring": "false",
-        "network": "unetr"
+        "network": "unet"
     }
 
     app = MyApp(app_dir, studies, conf)
@@ -341,9 +341,9 @@ def main():
                 "model": args.model,
                 "max_epochs": 20,
                 "dataset": "Dataset",  # PersistentDataset, CacheDataset
-                "train_batch_size": 4,
+                "train_batch_size": 2,
                 "val_batch_size": 1,
-                "multi_gpu": False,
+                "multi_gpu": True,
                 "val_split": 0.1,
                 "train_ds": train_ds_json,
                 "val_ds": val_ds_json,
