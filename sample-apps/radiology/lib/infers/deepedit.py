@@ -28,9 +28,10 @@ from monai.transforms import (
     Resized,
     ScaleIntensityRanged,
     SqueezeDimd,
-    ToNumpyd,
+    ToNumpyd, ScaleIntensityd,
 )
 
+from lib.transforms.transforms import SpatialCropByRoiD
 from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import Restored
@@ -74,10 +75,12 @@ class DeepEdit(BasicInferTask):
 
     def pre_transforms(self, data=None):
         t = [
-            LoadImaged(keys="image", reader="ITKReader"),
-            EnsureChannelFirstd(keys="image"),
-            Orientationd(keys="image", axcodes="RAS"),
-            ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            EnsureChannelFirstd(keys=("image", "label")),
+            # Orientationd(keys="image", axcodes="RAS"),
+            ScaleIntensityd(keys="image"),
+            SpatialCropByRoiD(keys=["image", "label"]),
+            # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
         ]
 
         self.add_cache_transform(t, data)
@@ -86,7 +89,7 @@ class DeepEdit(BasicInferTask):
             t.extend(
                 [
                     AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
-                    Resized(keys="image", spatial_size=self.spatial_size, mode="area"),
+                    # Resized(keys="image", spatial_size=self.spatial_size, mode="area"),
                     ResizeGuidanceMultipleLabelDeepEditd(guidance="guidance", ref_image="image"),
                     AddGuidanceSignalDeepEditd(
                         keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch

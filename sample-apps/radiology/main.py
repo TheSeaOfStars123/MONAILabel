@@ -288,7 +288,7 @@ def main():
         "models": args.model,
         "preload": "false",
         "skip_scoring": "false",
-        "network": "unet"
+        "network": "myunet"
     }
 
     app = MyApp(app_dir, studies, conf)
@@ -356,8 +356,8 @@ def main():
         res = app.scoring(
             request={
                 "method": "dice",
-                "y": "labels_crop_human",
-                "y_pred": "test_labels_human",
+                "y": "labels_crop",
+                "y_pred": "test_labels_deepedit_unet",
             }
         )
         print(res)
