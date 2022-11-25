@@ -12,6 +12,8 @@
 import logging
 
 import torch
+
+from lib.loss import MyDiceCELoss
 from lib.transforms.transforms import NormalizeLabelsInDatasetd, SpatialCropByRoiD
 from monai.apps.deepedit.interaction import Interaction
 from monai.apps.deepedit.transforms import (
@@ -79,7 +81,8 @@ class DeepEdit(BasicTrainTask):
         return torch.optim.Adam(context.network.parameters(), lr=0.0001)
 
     def loss_function(self, context: Context):
-        return DiceCELoss(to_onehot_y=True, softmax=True)
+        return MyDiceCELoss(to_onehot_y=True, softmax=True)
+        # return DiceCELoss(to_onehot_y=True, softmax=True)
 
     def get_click_transforms(self, context: Context):
         return [
