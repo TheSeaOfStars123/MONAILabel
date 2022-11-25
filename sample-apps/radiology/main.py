@@ -288,7 +288,7 @@ def main():
         "models": args.model,
         "preload": "false",
         "skip_scoring": "false",
-        "network": "myunet"
+        "network": "myunet2"
     }
 
     app = MyApp(app_dir, studies, conf)

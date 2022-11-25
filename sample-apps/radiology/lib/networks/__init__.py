@@ -1,1 +1,1 @@
-from .my_unet_3D import my_unet_3D
+from .my_unet_3D import My_Unet_3D

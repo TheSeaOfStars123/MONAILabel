@@ -42,6 +42,7 @@ from monai.transforms import (
 )
 
 from monailabel.deepedit.handlers import TensorBoardImageHandler
+from monailabel.deepedit.transforms import AddInitialCenterSeedPointd, AddGeodisTKSignald, SplitPredsOtherd
 from monailabel.tasks.train.basic_train import BasicTrainTask, Context
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ class DeepEdit(BasicTrainTask):
 
     def get_click_transforms(self, context: Context):
         return [
+            SplitPredsOtherd(keys="pred", other_name="resultfirst"),
             Activationsd(keys="pred", softmax=True),
             AsDiscreted(keys="pred", argmax=True),
             ToNumpyd(keys=("image", "label", "pred")),
@@ -115,9 +117,11 @@ class DeepEdit(BasicTrainTask):
             # Resized(keys=("image", "label"), spatial_size=self.spatial_size, mode=("area", "nearest")),
             SpatialCropByRoiD(keys=("image", "label")),
             # Transforms for click simulation
+            AddInitialCenterSeedPointd(keys="label", guidance="firstpoint"),
+            AddGeodisTKSignald(keys="image", guidance="firstpoint", lamb=0.05, iter=4, number_intensity_ch=1),
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
-            AddGuidanceSignalDeepEditd(keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch),
+            AddGuidanceSignalDeepEditd(keys="image", guidance="guidance", number_intensity_ch=2),
             #
             ToTensord(keys=("image", "label")),
             SelectItemsd(keys=("image", "label", "guidance", "label_names")),
@@ -125,6 +129,7 @@ class DeepEdit(BasicTrainTask):
 
     def train_post_transforms(self, context: Context):
         return [
+            SplitPredsOtherd(keys="pred", other_name="resultfirst"),
             Activationsd(keys="pred", softmax=True),
             AsDiscreted(
                 keys=("pred", "label"),

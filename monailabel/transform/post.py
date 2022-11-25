@@ -125,7 +125,10 @@ class Restored(MapTransform):
             #     resizer = Resize(spatial_size=spatial_size, mode=self.mode[idx])
             #     result = resizer(result, mode=self.mode[idx], align_corners=self.align_corners[idx])
             # d[key] = result if len(result.shape) <= 3 else result[0] if result.shape[0] == 1 else result
-            d[key] = result if result.shape[0] == 1 else result
+            if len(result.shape) > 4 or len(result.shape) <= 3:
+                d[key] = result
+            elif result.shape[0] == 1:
+                d[key] = result[0]
 
             meta = d.get(f"{key}_{self.meta_key_postfix}")
             if meta is None:

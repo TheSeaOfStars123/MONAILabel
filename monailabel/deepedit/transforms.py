@@ -11,6 +11,7 @@
 
 import json
 import logging
+import time
 from typing import Callable, Dict, Hashable, List, Optional, Sequence, Union
 
 import numpy as np
@@ -19,8 +20,10 @@ from monai.config import IndexSelection, KeysCollection
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Randomizable, Resize, SpatialCrop, generate_spatial_bounding_box, is_positive
 from monai.utils import InterpolateMode, PostFix, ensure_tuple_rep
-from scipy.ndimage import distance_transform_cdt, gaussian_filter
+from scipy.ndimage import distance_transform_cdt, gaussian_filter, center_of_mass
 from skimage import measure
+
+from utils.GeodisTK_demo3d import geodesic_distance_3d
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +145,135 @@ class AddGuidanceSignald(MapTransform):
                 result = torch.concat([img, s, s])
 
             d[key] = result
+        return d
+
+class AddInitialCenterSeedPointd(MapTransform):
+    def __init__(
+        self,
+        keys: KeysCollection,
+        guidance: str = "firstpoint",
+        connected_regions: int = 5,
+        allow_missing_keys: bool = False,
+    ):
+        super().__init__(keys, allow_missing_keys)
+        self.guidance_key = guidance
+        self.connected_regions = connected_regions
+        self.guidance: Dict[str, List[List[int]]] = {}
+
+    def _apply(self, label):
+        default_guidance = [-1] * 4
+        label = label[0]
+        # measure.label: Label connected regions of an integer array
+        blobs_labels = measure.label(label.astype(int), background=0)
+        firstpoint_guidance = []
+        if np.max(blobs_labels) <= 0:
+            firstpoint_guidance.append(default_guidance)
+        else:
+            for ridx in range(1, self.connected_regions + 1):
+                label = (blobs_labels == ridx).astype(np.float32)
+                if np.sum(label) == 0:
+                    firstpoint_guidance.append(default_guidance)
+                    continue
+                distance = distance_transform_cdt(label).flatten()
+                CM = np.array(center_of_mass(label)).astype(np.int32)
+                seed = np.ravel_multi_index(CM, label.shape)
+                dst = distance[seed]
+
+                # g = np.asarray(np.unravel_index(seed, label.shape))
+                # g[0] = dst[0]  # for debug
+                firstpoint_guidance.append([dst, CM[-3], CM[-2], CM[-1]])
+                logger.info(f"Number of simulated first point click: {CM}")
+
+        return np.asarray(firstpoint_guidance)
+
+    def __call__(self, data):
+        d = dict(data)
+        firstpoint_guidance = {}
+        for key in self.keys:
+            if key == "label":
+                for key_label in d["label_names"].keys():
+                    if key_label != "background":
+                        tmp_label = np.copy(d["label"])
+                        tmp_label[tmp_label != d["label_names"][key_label]] = 0
+                        tmp_label = (tmp_label > 0.5).astype(np.float32)
+                        firstpoint_guidance[key_label] = self._apply(tmp_label)
+
+            else:
+                print("This transform only applies to label key")
+        d[self.guidance_key] = firstpoint_guidance
+        return d
+
+class AddGeodisTKSignald(MapTransform):
+    def __init__(
+        self,
+        keys: KeysCollection,
+        guidance: str = "firstpoint",
+        lamb: int = 0.05,
+        iter: int = 4,
+        number_intensity_ch: int = 1,
+        allow_missing_keys: bool = False,
+    ):
+        super().__init__(keys, allow_missing_keys)
+        self.guidance = guidance
+        self.lamb = lamb
+        self.iter = iter
+        self.number_intensity_ch = number_intensity_ch
+
+    def _get_spacing(self, meta_dict):
+        spacing = (np.sqrt(np.sum(np.square(meta_dict["affine"]).numpy(), 0))[
+                   :-1]).astype(np.float32)
+        return spacing
+
+    def _get_signal(self, image, guidance, meta_info):
+        dimensions = 3
+        guidance = guidance.tolist()
+
+        if len(guidance):
+            if dimensions == 3:
+                # Assume channel is first and depth is last CHWD
+                signal = np.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]), dtype=np.float32)
+
+            sshape = signal.shape
+            for point in guidance:
+                if np.any(np.asarray(point) < 0):
+                    continue
+                if dimensions == 3:
+                    # Making sure points fall inside the image dimension
+                    p1 = max(0, min(int(point[-3]), sshape[-3] - 1))
+                    p2 = max(0, min(int(point[-2]), sshape[-2] - 1))
+                    p3 = max(0, min(int(point[-1]), sshape[-1] - 1))
+                    signal[:, p1, p2, p3] = 1.0
+            # Apply a GeodisTK to the signal
+            if np.max(signal[0]) > 0:
+                t1 = time.time()
+                spacing = self._get_spacing(meta_info)
+                S = signal[0].copy().astype(np.uint8)
+                D2 = geodesic_distance_3d(image[0], S, spacing, 0.05, 4)
+                dt2 = time.time() - t1
+                print("runtime(s) raster scan   {0:}".format(dt2))
+                signal[0] = D2
+            return signal
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            if key == "image":
+                image = d[key]
+                logging.info(f"Run AddGeodisTKSignald function, image shape is {image.shape}")
+                tmp_image = image[0: 0 + self.number_intensity_ch, ...]
+
+                guidance = d[self.guidance]
+                for key_label in guidance.keys():
+                    signal = self._get_signal(image, guidance[key_label], d['image_meta_dict'])
+                    tmp_image = np.concatenate([tmp_image, signal], axis=0)
+                    logging.info(f"Run AddGeodisTKSignald function, tmp_image shape is {tmp_image.shape}")
+                    if isinstance(d[key], MetaTensor):
+                        d[key].array = tmp_image
+                    else:
+                        d[key] = tmp_image
+                return d
+            else:
+                print("This transform only applies to image key")
         return d
 
 
@@ -376,4 +508,25 @@ class ResizeGuidanced(MapTransform):
             neg = np.multiply(neg_clicks, factor).astype(int, copy=False).tolist() if len(neg_clicks) else []
 
             d[key] = [pos, neg]
+        return d
+
+class SplitPredsOtherd(MapTransform):
+    """
+    Split preds and others for individual evaluation
+    """
+    def __init__(
+        self,
+        keys: KeysCollection,
+        other_name: str,
+        allow_missing_keys: bool = False,
+    ) -> None:
+        super().__init__(keys, allow_missing_keys)
+        self.other_name = other_name
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            if key == "pred":
+                d[self.other_name] = d[key][1]
+                d[key] = d[key][0]
         return d

@@ -17,7 +17,7 @@ import lib.infers
 import lib.trainers
 from monai.networks.nets import UNETR, DynUNet, UNet
 
-from lib.networks import my_unet_3D
+from lib.networks import My_Unet_3D
 from monailabel.interfaces.config import TaskConfig
 from monailabel.interfaces.tasks.infer_v2 import InferTask, InferType
 from monailabel.interfaces.tasks.scoring import ScoringMethod
@@ -62,7 +62,7 @@ class DeepEdit(TaskConfig):
         }
 
         # Number of input channels - 4 for BRATS and 1 for spleen
-        self.number_intensity_ch = 1
+        self.number_intensity_ch = 2
 
         network = self.conf.get("network", "dynunet")
 
@@ -119,11 +119,11 @@ class DeepEdit(TaskConfig):
             )
             print(self.network)
 
-        elif network == 'myunet':
-            self.network = my_unet_3D(
+        elif network == 'myunet2':
+            self.network = My_Unet_3D(
                 # spatial_dims=3,
-                in_channels=len(self.labels) + self.number_intensity_ch,
-                out_channels=len(self.labels),
+                in_channels=3,
+                out_channels=3,
                 channels=[16, 32, 64, 128, 256],
                 strides=[2, 2, 2, 2],
                 num_res_units=2,
