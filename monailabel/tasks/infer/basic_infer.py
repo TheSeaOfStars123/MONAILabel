@@ -474,7 +474,12 @@ class BasicInferTask(InferTask):
             if device.startswith("cuda"):
                 torch.cuda.empty_cache()
 
-            outputs = outputs[0] if convert_to_batch else outputs
+            # zyc
+            if isinstance(outputs, list):
+                for idx, item in enumerate(outputs):
+                    outputs[idx] = item[0] if convert_to_batch else item
+            else:
+                outputs = outputs[0] if convert_to_batch else outputs
             data[self.output_label_key] = outputs
         else:
             # consider them as callable transforms

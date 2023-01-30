@@ -9,7 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ScaleIntensityRanged, Spacingd
+from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ScaleIntensityRanged, Spacingd, ScaleIntensityd
 
 from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.scribbles.transforms import (
@@ -70,7 +70,8 @@ class ScribblesLikelihoodInferTask(BasicInferTask):
                 scribbles_bg_label=self.scribbles_bg_label,
                 scribbles_fg_label=self.scribbles_fg_label,
             ),
-            Spacingd(keys=["image", "label"], pixdim=self.pix_dim, mode=["bilinear", "nearest"]),
+            # Spacingd(keys=["image", "label"], pixdim=self.pix_dim, mode=["bilinear", "nearest"]),
+            # ScaleIntensityd(keys="image"),
             ScaleIntensityRanged(
                 keys="image",
                 a_min=self.intensity_range[0],

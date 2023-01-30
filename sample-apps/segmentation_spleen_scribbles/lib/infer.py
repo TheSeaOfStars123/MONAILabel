@@ -11,7 +11,7 @@
 
 from typing import Sequence, Callable
 
-from monai.inferers import SlidingWindowInferer, Inferer
+from monai.inferers import SlidingWindowInferer, Inferer, SimpleInferer
 from monai.transforms import (
     Activationsd,
     AddChanneld,
@@ -106,14 +106,13 @@ class SegmentationBreastWithWriteLogits(BasicInferTask):
     def pre_transforms(self, data=None) -> Sequence[Callable]:
         return [
             LoadImaged(keys="image"),
-            EnsureTyped(keys="image", device=data.get("device") if data else None),
             EnsureChannelFirstd(keys="image"),
-            # Spacingd(keys="image", pixdim=[1.0, 1.0, 1.0]),
-            ScaleIntensityRanged(keys="image", a_min=-57, a_max=164, b_min=0.0, b_max=1.0, clip=True),
+            EnsureTyped(keys="image", device=data.get("device") if data else None),
         ]
 
     def inferer(self, data=None) -> Inferer:
-        return SlidingWindowInferer(roi_size=(160, 160, 160))
+        # return SimpleInferer()
+        return SlidingWindowInferer(roi_size=(128, 128, 48), sw_batch_size=1, overlap=0.25)
 
     def post_transforms(self, data=None) -> Sequence[Callable]:
         return [
@@ -121,7 +120,7 @@ class SegmentationBreastWithWriteLogits(BasicInferTask):
             Activationsd(keys="pred", softmax=True),
             AsDiscreted(keys="pred", argmax=True),
             ToNumpyd(keys=["pred", "logits"]),
-            Restored(keys=["pred", "logits"], ref_image="image"),
+            Restored(keys=["pred", "logits"], ref_image="image"), # pred and logits(2, 128, 128, 48)
             BoundingBoxd(keys="pred", result="result", bbox="bbox"),
             WriteLogits(key="logits", result="result"),
         ]

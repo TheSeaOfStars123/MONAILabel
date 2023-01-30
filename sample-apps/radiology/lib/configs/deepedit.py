@@ -61,10 +61,13 @@ class DeepEdit(TaskConfig):
             "background": 0,
         }
 
-        # Number of input channels - 4 for BRATS and 1 for spleen
-        self.number_intensity_ch = 2
-
         network = self.conf.get("network", "dynunet")
+
+        # Number of input channels - 4 for BRATS and 1 for spleen
+        if network == "myunet2":
+            self.number_intensity_ch = 2
+        else:
+            self.number_intensity_ch = 1
 
         # Model Files
         self.path = [
@@ -177,6 +180,7 @@ class DeepEdit(TaskConfig):
                 labels=self.labels,
                 preload=strtobool(self.conf.get("preload", "false")),
                 spatial_size=self.spatial_size,
+                number_intensity_ch=self.number_intensity_ch,
                 config={"cache_transforms": True, "cache_transforms_in_memory": True, "cache_transforms_ttl": 300},
             ),
             f"{self.name}_seg": lib.infers.DeepEdit(

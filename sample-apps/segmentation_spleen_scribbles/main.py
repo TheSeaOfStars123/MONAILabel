@@ -47,7 +47,7 @@ class MyApp(MONAILabelApp):
 
         self.mmar = "clara_pt_spleen_ct_segmentation"
 
-        name = "breast"
+        name = "segmentation_breast"
 
         # Model Files
         self.path = [
@@ -86,13 +86,19 @@ class MyApp(MONAILabelApp):
             # "Spleen_Segmentation": SegmentationWithWriteLogits(
             #     self.final_model, load_from_mmar(self.mmar, self.model_dir)
             # ),
-            "Spleen_Segmentation": SegmentationBreastWithWriteLogits(
+            "Breast_Segmentation": SegmentationBreastWithWriteLogits(
                 path=self.path,
                 network=self.network,
                 labels=self.labels,
                 preload=strtobool(self.conf.get("preload", "false")),
             ),
-            "Histogram+GraphCut": HistogramBasedGraphCut(),
+            "Histogram+GraphCut": HistogramBasedGraphCut(
+                intensity_range=(0, 500, 0.0, 1.0, True),
+                pix_dim=(0.5, 0.5, 1.5),
+                lamda=1.0,
+                sigma=0.1,
+                num_bins=64,
+            ),
             "MIDeepSeg": SpleenMIDeepSeg(),
             "ISeg+GraphCut": SpleenISegGraphCut(),
             "ISeg+MONAICRF": SpleenISegCRF(),

@@ -56,19 +56,19 @@ class MyLikelihoodBasedSegmentor(BasicInferTask):
             #     pixdim=self.pix_dim,
             #     mode=["bilinear", "nearest"],
             # ),
-            ScaleIntensityRanged(
-                keys="image",
-                a_min=self.intensity_range[0],
-                a_max=self.intensity_range[1],
-                b_min=self.intensity_range[2],
-                b_max=self.intensity_range[3],
-                clip=self.intensity_range[4],
-            ),
+            # ScaleIntensityRanged(
+            #     keys="image",
+            #     a_min=self.intensity_range[0],
+            #     a_max=self.intensity_range[1],
+            #     b_min=self.intensity_range[2],
+            #     b_max=self.intensity_range[3],
+            #     clip=self.intensity_range[4],
+            # ),
             ApplyGaussianSmoothing(
                 image="image",
                 kernel_size=3,
                 sigma=1.0,
-                device="cuda",
+                device="cpu",
             ),
         ]
 
@@ -170,7 +170,7 @@ class ECONetPlusGraphCut(MyLikelihoodBasedSegmentor):
                     use_argmax=False,
                     model_path=self.model_path,
                     use_amp=False,
-                    device="cuda",
+                    device="cpu",
                 ),
                 Timeit(),
             ]

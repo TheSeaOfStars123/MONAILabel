@@ -9,6 +9,7 @@ from monai.networks.nets import UNet
 
 from monailabel.interfaces.config import TaskConfig
 from monailabel.interfaces.tasks.infer import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.interfaces.tasks.scoring import ScoringMethod
 from monailabel.interfaces.tasks.train import TrainTask
 from monailabel.tasks.scoring.dice import Dice
@@ -46,7 +47,7 @@ class SegmentationBreast(TaskConfig):
         ]
 
         # Download PreTrained Model
-        if strtobool(self.conf.get("use_pretrained_model", "true")):
+        if strtobool(self.conf.get("use_pretrained_model", "false")):
             url = f"{self.conf.get('pretrained_path', self.PRE_TRAINED_PATH)}/segmentation_{network}_spleen.pt"
             download_file(url, self.path[0])
 
@@ -62,12 +63,22 @@ class SegmentationBreast(TaskConfig):
         )
 
     def infer(self) -> Union[InferTask, Dict[str, InferTask]]:
-        task: InferTask = lib.infers.SegmentationBreast(
-            path=self.path,
-            network=self.network,
-            labels=self.labels,
-            preload=strtobool(self.conf.get("preload", "false")),
-        )
+        return {
+            self.name: lib.infers.SegmentationBreast(
+                path=self.path,
+                network=self.network,
+                labels=self.labels,
+                preload=strtobool(self.conf.get("preload", "false")),
+                enviroment="dev"
+            ),
+            f"{self.name}_prod": lib.infers.SegmentationBreast(
+                path=self.path,
+                network=self.network,
+                labels=self.labels,
+                preload=strtobool(self.conf.get("preload", "false")),
+                enviroment="prod"
+            ),
+        }
         return task
 
     def trainer(self) -> Optional[TrainTask]:

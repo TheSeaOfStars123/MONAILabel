@@ -8,9 +8,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import GeodisTK
 import json
 import logging
+import os
 import time
 from typing import Callable, Dict, Hashable, List, Optional, Sequence, Union
 
@@ -23,7 +24,6 @@ from monai.utils import InterpolateMode, PostFix, ensure_tuple_rep
 from scipy.ndimage import distance_transform_cdt, gaussian_filter, center_of_mass
 from skimage import measure
 
-from utils.GeodisTK_demo3d import geodesic_distance_3d
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ class AddInitialCenterSeedPointd(MapTransform):
                     firstpoint_guidance.append(default_guidance)
                     continue
                 distance = distance_transform_cdt(label).flatten()
-                CM = np.array(center_of_mass(label)).astype(np.int32)
+                CM = np.round(center_of_mass(label)).astype(np.int32) # 向上取整
                 seed = np.ravel_multi_index(CM, label.shape)
                 dst = distance[seed]
 
@@ -200,7 +200,20 @@ class AddInitialCenterSeedPointd(MapTransform):
 
             else:
                 print("This transform only applies to label key")
-        d[self.guidance_key] = firstpoint_guidance
+        d[self.guidance_key] = firstpoint_guidance.copy()
+        if os.path.getsize("/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json") > 0:
+            with open("/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json", 'r') as load_f:
+                load_dict_list = json.load(load_f)
+        else:
+            load_dict_list = []
+        basebame = os.path.split(d['image_meta_dict']['filename_or_obj'])[1].split('.')[0]
+        for key_label in firstpoint_guidance.keys():
+            firstpoint_guidance[key_label] = firstpoint_guidance[key_label].tolist()
+        json_backup = {}
+        json_backup[basebame+"_firstpoint_guidances"] = firstpoint_guidance
+        load_dict_list.append(json_backup)
+        with open("/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json", "w") as f:
+            json.dump(load_dict_list, f)
         return d
 
 class AddGeodisTKSignald(MapTransform):
@@ -248,11 +261,26 @@ class AddGeodisTKSignald(MapTransform):
                 t1 = time.time()
                 spacing = self._get_spacing(meta_info)
                 S = signal[0].copy().astype(np.uint8)
-                D2 = geodesic_distance_3d(image[0], S, spacing, 0.05, 4)
+                D2 = self.geodesic_distance_3d(image[0], S, spacing, 0.05, 4)
                 dt2 = time.time() - t1
                 print("runtime(s) raster scan   {0:}".format(dt2))
                 signal[0] = D2
             return signal
+
+    def geodesic_distance_3d(self, I, S, spacing, lamb, iter):
+        '''
+        Get 3D geodesic disntance by raser scanning.
+        I: input image array, can have multiple channels, with shape [D, H, W] or [D, H, W, C]
+           Type should be np.float32.
+        S: binary image where non-zero pixels are used as seeds, with shape [D, H, W]
+           Type should be np.uint8.
+        spacing: a tuple of float numbers for pixel spacing along D, H and W dimensions respectively.
+        lamb: weighting betwween 0.0 and 1.0
+              if lamb==0.0, return spatial euclidean distance without considering gradient
+              if lamb==1.0, the distance is based on gradient only without using spatial distance
+        iter: number of iteration for raster scanning.
+        '''
+        return GeodisTK.geodesic3d_raster_scan(I, S, spacing, lamb, iter)
 
     def __call__(self, data):
         d = dict(data)

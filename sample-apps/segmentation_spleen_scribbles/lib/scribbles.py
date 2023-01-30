@@ -9,7 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from monai.transforms import AddChanneld, Compose, LoadImaged, ScaleIntensityRanged, Spacingd
+from monai.transforms import AddChanneld, Compose, LoadImaged, ScaleIntensityRanged, Spacingd, SqueezeDimd
 
 from lib.transforms import MakeMIDeepEGDUnaryd
 from monailabel.interfaces.tasks.infer import InferTask, InferType
@@ -50,17 +50,18 @@ class SpleenPostProc(BasicInferTask):
         return [
             LoadImaged(keys=["image", "logits", "label"]),
             AddChanneld(keys=["image", "label"]),
+            # SqueezeDimd(keys=("logits"), dim=0),
             # at the moment optimisers are bottleneck taking a long time,
             # therefore scaling non-isotropic with big spacing
             # Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
-            ScaleIntensityRanged(
-                keys="image",
-                a_min=self.intensity_range[0],
-                a_max=self.intensity_range[1],
-                b_min=self.intensity_range[2],
-                b_max=self.intensity_range[3],
-                clip=self.intensity_range[4],
-            ),
+            # ScaleIntensityRanged(
+            #     keys="image",
+            #     a_min=self.intensity_range[0],
+            #     a_max=self.intensity_range[1],
+            #     b_min=self.intensity_range[2],
+            #     b_max=self.intensity_range[3],
+            #     clip=self.intensity_range[4],
+            # ),
         ]
 
     def post_transforms(self, data=None):

@@ -16,7 +16,7 @@ from monai.apps.deepedit.transforms import (
     AddGuidanceSignalDeepEditd,
     DiscardAddGuidanced,
     ResizeGuidanceMultipleLabelDeepEditd,
-)
+    LoadGuidanceFromJsonFiled)
 from monai.inferers import Inferer, SimpleInferer
 from monai.transforms import (
     Activationsd,
@@ -31,7 +31,8 @@ from monai.transforms import (
     ToNumpyd, ScaleIntensityd,
 )
 
-from lib.transforms.transforms import SpatialCropByRoiD
+from lib.transforms.transforms import SpatialCropByRoiD, WriteCrop
+from monailabel.deepedit.transforms import AddGeodisTKSignald, SplitPredsOtherd
 from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.tasks.infer.basic_infer import BasicInferTask
 from monailabel.transform.post import Restored
@@ -88,9 +89,11 @@ class DeepEdit(BasicInferTask):
         if self.type == InferType.DEEPEDIT:
             t.extend(
                 [
+                    LoadGuidanceFromJsonFiled(guidance=("firstpoint_guidances", "label_guidances", "random_guidances"), file_path="/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json"),
+                    AddGeodisTKSignald(keys="image", guidance="firstpoint", lamb=0.05, iter=4, number_intensity_ch=1),
                     AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
                     # Resized(keys="image", spatial_size=self.spatial_size, mode="area"),
-                    ResizeGuidanceMultipleLabelDeepEditd(guidance="guidance", ref_image="image"),
+                    # ResizeGuidanceMultipleLabelDeepEditd(guidance="guidance", ref_image="image"),
                     AddGuidanceSignalDeepEditd(
                         keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch
                     ),
@@ -116,11 +119,32 @@ class DeepEdit(BasicInferTask):
         return []  # Self-determine from the list of pre-transforms provided
 
     def post_transforms(self, data=None) -> Sequence[Callable]:
-        return [
-            EnsureTyped(keys="pred", device=data.get("device") if data else None),
-            Activationsd(keys="pred", softmax=True),
-            AsDiscreted(keys="pred", argmax=True),
-            SqueezeDimd(keys="pred", dim=0),
-            ToNumpyd(keys="pred"),
-            Restored(keys="pred", ref_image="image"),
-        ]
+        if self.type == InferType.DEEPEDIT:
+            t = [
+                SplitPredsOtherd(keys="pred", other_name="resultfirst"),
+                EnsureTyped(keys="pred", device=data.get("device") if data else None),
+                Activationsd(keys="pred", softmax=True),
+                AsDiscreted(keys=("pred", "label"), argmax=(True, False), to_onehot=(2, 2)),  # label:(2, 128, 128, 48)
+                EnsureChannelFirstd(keys=("label", "pred")),  # pred:(1, 2, 128, 128, 48)  label:(1, 2, 128, 128, 48)
+                ToNumpyd(keys="pred"),
+                # writer前必须要使用restore
+                Restored(keys=["image", "label", "pred"], ref_image="image"),
+                WriteCrop(keys=["image", "label", "pred"],
+                          location_tag=["images_crop", "labels_crop_monai", "test_labels_monai"]),
+                SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(2, 128, 128, 48) label:(2, 128, 128, 48)
+                AsDiscreted(keys=("pred", "label"), argmax=True),  # pred:(1, 128, 128, 48) label:(1, 128, 128, 48)
+                SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(128, 128, 48) label:(128, 128, 48)
+                WriteCrop(keys=["label"], location_tag=["labels_crop"]),
+            ]
+        else:  # InferType.SEGMENTATION
+            t = [
+                EnsureTyped(keys="pred", device=data.get("device") if data else None),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
+                Activationsd(keys="pred", softmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
+                AsDiscreted(keys="pred", argmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (1, 128, 128, 48)
+                SqueezeDimd(keys="pred", dim=0),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (128, 128, 48)
+                ToNumpyd(keys="pred"),
+                Restored(keys="pred", ref_image="image"),
+            ]
+        return t
+
+

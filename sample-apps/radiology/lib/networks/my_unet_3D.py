@@ -362,7 +362,7 @@ class My_Unet_3D(nn.Module):
         down2 = self.down2(down1)                   # 32->64                        (1,64,16,16,6)
         down3 = self.down3(down2)                   # 64->128                       (1,128,8,8,3)
         down4 = self.down4(down3)                   # 128->256                      (1,256,8,8,3)
-        up4 = torch.cat([down3, down4, down1_first], dim=1)  # 128+256+128=512   (1,512,8,8,3)
+        up4 = torch.cat([down3, down4, down1_first], dim=1)  # 128+256+128=512      (1,512,8,8,3)
         up3 = self.up3(up4)  # 512->64                              (1,64,16,16,6)
         up3 = torch.cat([down2, up3], dim=1)  # 64+64=128           (1,128,16,16,6)
         up2 = self.up2(up3)  # 128->32                              (1,32,32,32,12)

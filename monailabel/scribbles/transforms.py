@@ -627,3 +627,21 @@ class WriteLogits(Transform):
 
 ########################
 ########################
+
+class PlotSnapshotAndSave(InteractiveSegmentationTransform):
+    def __init__(
+        self,
+        image="image",
+        label="label",
+        meta_key_postfix="meta_dict"
+    ) -> None:
+        super.__init__(meta_key_postfix)
+        self.image = image
+        self.label = label
+
+    def __call__(self, data):
+        d = dict(data)
+        image = self._fetch_data(d, self.image)
+        label = self._fetch_data(d, self.label)
+
+

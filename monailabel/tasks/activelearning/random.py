@@ -28,7 +28,9 @@ class Random(Strategy):
         super().__init__("Random Strategy")
 
     def __call__(self, request, datastore: Datastore):
-        images = datastore.get_unlabeled_images()
+        # random 图像策略 zyc
+        # images = datastore.get_unlabeled_images()
+        images = datastore.get_images()
         if not len(images):
             return None
 

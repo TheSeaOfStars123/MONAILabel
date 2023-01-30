@@ -19,7 +19,7 @@ import re
 import ssl
 import tempfile
 from pathlib import Path
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus,
 
 import requests
 

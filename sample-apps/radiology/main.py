@@ -126,7 +126,7 @@ class MyApp(MONAILabelApp):
         infers.update(
             {
                 "Histogram+GraphCut": HistogramBasedGraphCut(
-                    intensity_range=(-300, 200, 0.0, 1.0, True),
+                    intensity_range=(-300, 500, 0.0, 1.0, True),
                     pix_dim=(2.5, 2.5, 5.0),
                     lamda=1.0,
                     sigma=0.1,
@@ -288,7 +288,8 @@ def main():
         "models": args.model,
         "preload": "false",
         "skip_scoring": "false",
-        "network": "myunet2"
+        "network": "myunet2",
+        "use_pretrained_model": "false",
     }
 
     app = MyApp(app_dir, studies, conf)
@@ -357,7 +358,7 @@ def main():
             request={
                 "method": "dice",
                 "y": "labels_crop",
-                "y_pred": "test_labels_deepedit_unet",
+                "y_pred": "test_labels",
             }
         )
         print(res)

@@ -280,8 +280,9 @@ class MONAILabelApp:
             if os.path.exists(image_id):
                 request["save_label"] = False
             else:
-                # zyc
-                request["label"] = datastore.get_label_uri(request["image"], "final")
+                if "label" not in request:
+                    # zyc
+                    request["label"] = datastore.get_label_uri(request["image"], "final")
                 request["image"] = datastore.get_image_uri(request["image"])
 
             if os.path.isdir(request["image"]):
