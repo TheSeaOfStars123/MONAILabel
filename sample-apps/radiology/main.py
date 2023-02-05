@@ -32,6 +32,7 @@ from monailabel.interfaces.tasks.train import TrainTask
 from monailabel.scribbles.infer import GMMBasedGraphCut, HistogramBasedGraphCut
 from monailabel.tasks.activelearning.first import First
 from monailabel.tasks.activelearning.random import Random
+from monailabel.tasks.activelearning.search import Search
 from monailabel.tasks.train.basic_train import Context
 from monailabel.utils.others.class_utils import get_class_names
 from monailabel.utils.others.generic import strtobool
@@ -192,6 +193,7 @@ class MyApp(MONAILabelApp):
 
     def init_strategies(self) -> Dict[str, Strategy]:
         strategies: Dict[str, Strategy] = {
+            "search": Search(),
             "random": Random(),
             "first": First(),
             "last": Last(),

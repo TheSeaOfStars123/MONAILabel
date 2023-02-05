@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 
-from monailabel.interfaces.datastore import Datastore, DefaultLabelTag
+from monailabel.interfaces.datastore import Datastore, DefaultLabelTag, DefaultImageTag
 from monailabel.interfaces.exception import ImageNotFoundException, LabelNotFoundException
 from monailabel.utils.others.generic import file_checksum, file_ext, remove_file
 
@@ -70,8 +70,14 @@ class LocalDatastoreModel(BaseModel):
         obj = self.objects.get(id)
         return obj.labels.get(tag) if obj else None
 
-    def image_path(self):
-        return os.path.join(self.base_path, self.images_dir) if self.base_path else self.images_dir
+    def image_path(self, tag):
+        path = os.path.join(self.images_dir, tag) if tag else self.images_dir
+        return os.path.join(self.base_path, path) if self.base_path else path
+
+    def images_path(self):
+        # path = self.images_dir
+        # return {tag: os.path.join(path, tag) if self.base_path else path for tag in self.tags()}
+        return {}
 
     def label_path(self, tag):
         path = os.path.join(self.labels_dir, tag) if tag else self.labels_dir
@@ -137,7 +143,9 @@ class LocalDatastore(Datastore):
         self._datastore.base_path = self._datastore_path
         self._init_from_datastore_file(throw_exception=True)
 
-        os.makedirs(self._datastore.image_path(), exist_ok=True)
+        os.makedirs(self._datastore.image_path(None), exist_ok=True)
+        os.makedirs(self._datastore.image_path(DefaultImageTag.EARLY_POST_CONTRAST), exist_ok=True)
+        os.makedirs(self._datastore.image_path(DefaultImageTag.LATE_POST_CONTRAST), exist_ok=True)
         os.makedirs(self._datastore.label_path(None), exist_ok=True)
         os.makedirs(self._datastore.label_path(DefaultLabelTag.FINAL), exist_ok=True)
         os.makedirs(self._datastore.label_path(DefaultLabelTag.ORIGINAL), exist_ok=True)
@@ -149,7 +157,14 @@ class LocalDatastore(Datastore):
         if auto_reload:
             logger.info("Start observing external modifications on datastore (AUTO RELOAD)")
             # Image Dir
-            include_patterns = [f"{self._datastore.image_path()}{os.path.sep}{ext}" for ext in [*extensions]]
+            include_patterns = [f"{self._datastore.image_path(None)}{os.path.sep}{ext}" for ext in [*extensions]]
+
+            # Image Dir(s)
+            images_dirs = self._datastore.images_path()
+            images_dirs[DefaultImageTag.EARLY_POST_CONTRAST] = self._datastore.image_path(DefaultImageTag.EARLY_POST_CONTRAST)
+            images_dirs[DefaultImageTag.LATE_POST_CONTRAST] = self._datastore.image_path(DefaultImageTag.LATE_POST_CONTRAST)
+            for images_dir in images_dirs.values():
+                include_patterns.extend(f"{images_dir}{os.path.sep}{ext}" for ext in [*extensions])
 
             # Label Dir(s)
             label_dirs = self._datastore.labels_path()
@@ -239,7 +254,7 @@ class LocalDatastore(Datastore):
         """
 
         tag = DefaultLabelTag.FINAL
-        image_path = self._datastore.image_path()
+        image_path = self._datastore.image_path(None)
         label_path = self._datastore.label_path(tag)
 
         ds = []
@@ -275,7 +290,7 @@ class LocalDatastore(Datastore):
         """
         obj = self._datastore.objects.get(image_id)
         name = self._filename(image_id, obj.image.ext) if obj else ""
-        return str(os.path.realpath(os.path.join(self._datastore.image_path(), name))) if obj else ""
+        return str(os.path.realpath(os.path.join(self._datastore.image_path(None), name))) if obj else ""
 
     def get_image_info(self, image_id: str) -> Dict[str, Any]:
         """
@@ -288,7 +303,7 @@ class LocalDatastore(Datastore):
         info = copy.deepcopy(obj.image.info) if obj else {}
         if obj:
             name = self._filename(image_id, obj.image.ext)
-            path = os.path.realpath(os.path.join(self._datastore.image_path(), name))
+            path = os.path.realpath(os.path.join(self._datastore.image_path(None), name))
             info["path"] = path
         return info
 
@@ -437,14 +452,14 @@ class LocalDatastore(Datastore):
         """
         self._reconcile_datastore()
 
-    def add_image(self, image_id: str, image_filename: str, image_info: Dict[str, Any]) -> str:
+    def add_image(self, image_id: str, image_filename: str, image_tag: str, image_info: Dict[str, Any]) -> str:
         id, image_ext = self._to_id(os.path.basename(image_filename))
         if not image_id:
             image_id = id
 
         logger.info(f"Adding Image: {image_id} => {image_filename}")
         name = self._filename(image_id, image_ext)
-        dest = os.path.realpath(os.path.join(self._datastore.image_path(), name))
+        dest = os.path.realpath(os.path.join(self._datastore.image_path(image_tag), name))
 
         with FileLock(self._lock_file):
             logger.debug("Acquired the lock!")
@@ -474,7 +489,7 @@ class LocalDatastore(Datastore):
 
         # Remove Image
         name = self._filename(image_id, obj.image.ext)
-        remove_file(os.path.realpath(os.path.join(self._datastore.image_path(), name)))
+        remove_file(os.path.realpath(os.path.join(None, name)))
 
         if not self._auto_reload:
             self.refresh()
@@ -591,7 +606,7 @@ class LocalDatastore(Datastore):
         invalidate = 0
         self._init_from_datastore_file()
 
-        local_images = self._list_files(self._datastore.image_path(), self._extensions)
+        local_images = self._list_files(self._datastore.image_path(None), self._extensions)
 
         image_ids = list(self._datastore.objects.keys())
         for image_file in local_images:
@@ -648,7 +663,7 @@ class LocalDatastore(Datastore):
         objects: Dict[str, ImageLabelModel] = {}
         for image_id, obj in self._datastore.objects.items():
             name = self._filename(image_id, obj.image.ext)
-            if not os.path.exists(os.path.realpath(os.path.join(self._datastore.image_path(), name))):
+            if not os.path.exists(os.path.realpath(os.path.join(self._datastore.image_path(None), name))):
                 logger.info(f"Removing non existing Image Id: {image_id}")
                 invalidate += 1
             else:

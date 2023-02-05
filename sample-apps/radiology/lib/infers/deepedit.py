@@ -16,7 +16,8 @@ from monai.apps.deepedit.transforms import (
     AddGuidanceSignalDeepEditd,
     DiscardAddGuidanced,
     ResizeGuidanceMultipleLabelDeepEditd,
-    LoadGuidanceFromJsonFiled)
+    # LoadGuidanceFromJsonFiled
+)
 from monai.inferers import Inferer, SimpleInferer
 from monai.transforms import (
     Activationsd,
@@ -89,7 +90,7 @@ class DeepEdit(BasicInferTask):
         if self.type == InferType.DEEPEDIT:
             t.extend(
                 [
-                    LoadGuidanceFromJsonFiled(guidance=("firstpoint_guidances", "label_guidances", "random_guidances"), file_path="/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json"),
+                    # LoadGuidanceFromJsonFiled(guidance=("firstpoint_guidances", "label_guidances", "random_guidances"), file_path="/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json"),
                     AddGeodisTKSignald(keys="image", guidance="firstpoint", lamb=0.05, iter=4, number_intensity_ch=1),
                     AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
                     # Resized(keys="image", spatial_size=self.spatial_size, mode="area"),

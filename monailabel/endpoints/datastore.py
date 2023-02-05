@@ -61,6 +61,7 @@ def add_image(
     background_tasks: BackgroundTasks,
     image: Optional[str] = None,
     params: str = Form("{}"),
+    tag: Optional[str] = None,
     file: UploadFile = File(...),
     user: Optional[str] = None,
 ):
@@ -78,7 +79,8 @@ def add_image(
     save_params: Dict[str, Any] = json.loads(params) if params else {}
     if user:
         save_params["user"] = user
-    image_id = instance.datastore().add_image(image_id, image_file, save_params)
+
+    image_id = instance.datastore().add_image(image_id, image_file, tag, save_params)
     return {"image": image_id}
 
 
@@ -200,10 +202,11 @@ async def api_add_image(
     background_tasks: BackgroundTasks,
     image: Optional[str] = None,
     params: str = Form("{}"),
+    tag: Optional[str] = None,
     file: UploadFile = File(...),
     user: User = Depends(get_annotator_user),
 ):
-    return add_image(background_tasks, image, params, file, user.username)
+    return add_image(background_tasks, image, params, tag, file, user.username)
 
 
 @router.delete("/", summary="Remove Image and corresponding labels", deprecated=True)

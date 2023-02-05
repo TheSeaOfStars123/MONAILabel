@@ -36,7 +36,7 @@ class MONAILabel(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "MONAILabel"
-        self.parent.categories = ["Active Learning"]
+        self.parent.categories = ["Active Learning1"]
         self.parent.dependencies = []
         self.parent.contributors = ["NVIDIA, KCL"]
         self.parent.helpText = """
@@ -183,6 +183,18 @@ class _ui_MONAILabelSettingsPanel:
             str(qt.SIGNAL("valueAsIntChanged(int)")),
         )
 
+        examPath = qt.QLineEdit()
+        groupLayout.addRow("Exam Path:", examPath)
+        parent.registerProperty(
+            "MONAILabel/examPath", examPath, "text", str(qt.SIGNAL("textChanged(QString)"))
+        )
+
+        patientName = qt.QLineEdit()
+        groupLayout.addRow("Patient Name:", patientName)
+        parent.registerProperty(
+            "MONAILabel/patientName", patientName, "text", str(qt.SIGNAL("textChanged(QString)"))
+        )
+
         vBoxLayout.addWidget(groupBox)
         vBoxLayout.addStretch(1)
 
@@ -230,7 +242,7 @@ class MONAILabelWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "CurrentStrategy": "",
             "CurrentTrainer": "",
         }
-        self.file_ext = ".nii.gz"
+        self.file_ext = ".nii"
 
         self.dgPositivePointListNode = None
         self.dgPositivePointListNodeObservers = []
@@ -253,6 +265,7 @@ class MONAILabelWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         Called when the user opens the module the first time and the widget is initialized.
         """
+
         ScriptedLoadableModuleWidget.setup(self)
 
         # Load widget from .ui file (created by Qt Designer).
@@ -369,7 +382,7 @@ class MONAILabelWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.initializeParameterNode()
         self.updateServerUrlGUIFromSettings()
-        # self.onClickFetchInfo()
+        self.onClickFetchInfo()
 
         if slicer.util.settingsValue("MONAILabel/askForUserName", False, converter=slicer.util.toBool):
             text = qt.QInputDialog().getText(
@@ -1223,8 +1236,12 @@ class MONAILabelWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if not strategy:
                 slicer.util.errorDisplay("No Strategy Found/Selected\t")
                 return
-
-            sample = self.logic.next_sample(strategy, self.getParamsFromConfig("activelearning", strategy))
+            params = self.getParamsFromConfig("activelearning", strategy)
+            if params:
+                params["patient_name"] = slicer.util.settingsValue("MONAILabel/patientName", None)
+            else:
+                params = {"patient_name": slicer.util.settingsValue("MONAILabel/patientName", None)}
+            sample = self.logic.next_sample(strategy, params)
             logging.debug(sample)
             if not sample.get("id"):
                 slicer.util.warningDisplay(
@@ -1246,6 +1263,8 @@ class MONAILabelWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             node_name = sample.get("PatientID", sample.get("name", image_id))
             checksum = sample.get("checksum")
             local_exists = image_file and os.path.exists(image_file)
+            settings = qt.QSettings()
+            settings.setValue("MONAILabel/examPath", sample["exam_path"])
 
             logging.info(f"Check if file exists/shared locally: {image_file} => {local_exists}")
             if local_exists:
@@ -2164,7 +2183,9 @@ class MONAILabelLogic(ScriptedLoadableModuleLogic):
         return MONAILabelClient(self.server_url, self.tmpdir, self.client_id).remove_session(session_id)
 
     def upload_image(self, image_in, image_id=None):
-        return MONAILabelClient(self.server_url, self.tmpdir, self.client_id).upload_image(image_in, image_id)
+        return MONAILabelClient(self.server_url, self.tmpdir, self.client_id).upload_image(
+            image_in, image_id
+        )
 
     def save_label(self, image_in, label_in, params):
         return MONAILabelClient(self.server_url, self.tmpdir, self.client_id).save_label(

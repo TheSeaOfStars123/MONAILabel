@@ -19,6 +19,11 @@ class DefaultLabelTag(str, Enum):
     FINAL = "final"
 
 
+class DefaultImageTag(str, Enum):
+    EARLY_POST_CONTRAST = "pre-contrast"
+    LATE_POST_CONTRAST = "late post-contrast"
+
+
 class Datastore(metaclass=ABCMeta):
     @abstractmethod
     def name(self) -> str:
@@ -206,7 +211,7 @@ class Datastore(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def add_image(self, image_id: str, image_filename: str, image_info: Dict[str, Any]) -> str:
+    def add_image(self, image_id: str, image_filename: str, image_tag: str, image_info: Dict[str, Any]) -> str:
         """
         Save a image for the given image id and return the newly saved image's id
 
