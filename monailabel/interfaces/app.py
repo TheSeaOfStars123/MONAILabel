@@ -233,6 +233,12 @@ class MONAILabelApp:
 
         return meta
 
+    def simpleInfo(self):
+        meta = {
+            "name": self.name,
+        }
+        return meta
+
     def infer(self, request, datastore=None):
         """
         Run Inference for an exiting pre-trained model.

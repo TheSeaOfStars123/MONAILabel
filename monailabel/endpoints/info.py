@@ -26,7 +26,14 @@ def app_info():
     instance: MONAILabelApp = app_instance()
     return instance.info()
 
+def app_info_simple():
+    instance: MONAILabelApp = app_instance()
+    return instance.info()
 
 @router.get("/", summary="Get App Info")
 async def api_app_info(user: User = Depends(get_basic_user)):
     return app_info()
+
+@router.get("/simpleInfo", summary="Get App simple info")
+async def api_app_info_simple(user: User = Depends(get_basic_user)):
+    return app_info_simple()
