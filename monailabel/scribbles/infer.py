@@ -9,7 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ScaleIntensityRanged, Spacingd, ScaleIntensityd
+from monai.transforms import Compose, EnsureChannelFirstd, LoadImaged, ScaleIntensityRanged, Spacingd, ScaleIntensityd, \
+    AddChanneld
 
 from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.scribbles.transforms import (
@@ -228,6 +229,104 @@ class GMMBasedGraphCut(ScribblesLikelihoodInferTask):
                     scribbles_fg_label=self.scribbles_fg_label,
                     num_mixtures=self.num_mixtures,
                     normalise=False,
+                ),
+            ]
+        )
+
+class ScribblesPostProc(BasicInferTask):
+    """
+      Defines a generic post processing task for segmentation.
+    """
+
+    def __init__(
+            self,
+            dimension,
+            description,
+            intensity_range=(-300, 200, 0.0, 1.0, True),
+            pix_dim=(2.5, 2.5, 5.0),
+    ):
+        super().__init__(
+            path=None,
+            network=None,
+            labels=None,
+            type=InferType.SCRIBBLES,
+            dimension=dimension,
+            description=description
+        )
+        self.intensity_range = intensity_range
+        self.pix_dim = pix_dim
+
+    def pre_transforms(self, data=None):
+        return [
+            LoadImaged(keys=["image", "logits", "label"]),
+            AddChanneld(keys=["image", "label"]),
+            # SqueezeDimd(keys=("logits"), dim=0),
+            # at the moment optimisers are bottleneck taking a long time,
+            # therefore scaling non-isotropic with big spacing
+            # Spacingd(keys=["image", "logits", "label"], pixdim=self.pix_dim, mode=["bilinear", "bilinear", "nearest"]),
+            # ScaleIntensityRanged(
+            #     keys="image",
+            #     a_min=self.intensity_range[0],
+            #     a_max=self.intensity_range[1],
+            #     b_min=self.intensity_range[2],
+            #     b_max=self.intensity_range[3],
+            #     clip=self.intensity_range[4],
+            # ),
+        ]
+
+    def post_transforms(self, data=None):
+        return [
+            Restored(keys="pred", ref_image="image"),
+            BoundingBoxd(keys="pred", result="result", bbox="bbox"),
+        ]
+
+    def inferer(self, data=None):
+        raise NotImplementedError("inferer not implemented in base post proc class")
+
+
+class BreastISegGraphCut(ScribblesPostProc):
+    """
+    Defines ISeg+GraphCut based post processing task for Spleen segmentation from the following paper:
+
+    Wang, Guotai, et al. "Interactive medical image segmentation using deep learning with image-specific fine tuning."
+    IEEE transactions on medical imaging 37.7 (2018): 1562-1573. (preprint: https://arxiv.org/pdf/1710.04043.pdf)
+
+    This task takes as input 1) original image volume 2) logits from model and 3) scribbles from user
+    indicating corrections for initial segmentation from model. User-scribbles are incorporated using
+    Equation 7 on page 4 of the paper.
+
+    SimpleCRF's GraphCut MaxFlow is used to optimise Equation 5 from the paper,
+    where unaries come from Equation 7 and pairwise is the original input volume.
+    """
+
+    def __init__(
+        self,
+        dimension=3,
+        description="A post processing step with ISeg + SimpleCRF's GraphCut for Breast segmentation",
+        intensity_range=(-300, 200, 0.0, 1.0, True),
+        pix_dim=(2.5, 2.5, 5.0),
+    ):
+        super().__init__(dimension, description, intensity_range, pix_dim)
+
+    def inferer(self, data=None):
+        return Compose(
+            [
+                # unary term maker
+                MakeISegUnaryd(
+                    image="image",
+                    logits="logits",
+                    scribbles="label",
+                    unary="unary",
+                    scribbles_bg_label=2,
+                    scribbles_fg_label=3,
+                ),
+                # optimiser
+                ApplyGraphCutOptimisationd(
+                    unary="unary",
+                    pairwise="image",
+                    post_proc_label="pred",
+                    lamda=5.0,
+                    sigma=0.01,
                 ),
             ]
         )

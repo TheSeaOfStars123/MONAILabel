@@ -29,14 +29,15 @@ from monai.transforms import (
     Resized,
     ScaleIntensityRanged,
     SqueezeDimd,
-    ToNumpyd, ScaleIntensityd,
+    ToNumpyd, ScaleIntensityd, CopyItemsd,
 )
 
 from lib.transforms.transforms import SpatialCropByRoiD, WriteCrop
 from monailabel.deepedit.transforms import AddGeodisTKSignald, SplitPredsOtherd
 from monailabel.interfaces.tasks.infer_v2 import InferType
+from monailabel.scribbles.transforms import WriteLogits
 from monailabel.tasks.infer.basic_infer import BasicInferTask
-from monailabel.transform.post import Restored
+from monailabel.transform.post import Restored, BoundingBoxd
 
 
 class DeepEdit(BasicInferTask):
@@ -50,6 +51,7 @@ class DeepEdit(BasicInferTask):
         path,
         network=None,
         type=InferType.DEEPEDIT,
+        environment="dev",
         labels=None,
         dimension=3,
         spatial_size=(128, 128, 64),
@@ -71,19 +73,31 @@ class DeepEdit(BasicInferTask):
             **kwargs,
         )
 
+        self.environment = environment
         self.spatial_size = spatial_size
         self.target_spacing = target_spacing
         self.number_intensity_ch = number_intensity_ch
 
     def pre_transforms(self, data=None):
-        t = [
-            LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            EnsureChannelFirstd(keys=("image", "label")),
-            # Orientationd(keys="image", axcodes="RAS"),
-            ScaleIntensityd(keys="image"),
-            SpatialCropByRoiD(keys=["image", "label"]),
-            # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
-        ]
+        if self.environment == "dev":
+            t = [
+                LoadImaged(keys=("image", "label"), reader="ITKReader"),
+                EnsureChannelFirstd(keys=("image", "label")),
+                # Orientationd(keys="image", axcodes="RAS"),
+                ScaleIntensityd(keys="image"),
+                SpatialCropByRoiD(keys=["image", "label"]),
+                # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            ]
+        elif self.environment == "prod":
+            t = [
+                LoadImaged(keys=("image"), reader="ITKReader"),
+                EnsureChannelFirstd(keys=("image")),
+                # Orientationd(keys="image", axcodes="RAS"),
+                ScaleIntensityd(keys="image"),
+                SpatialCropByRoiD(keys=["image"]),
+                # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
+            ]
+        return t
 
         self.add_cache_transform(t, data)
 
@@ -120,32 +134,44 @@ class DeepEdit(BasicInferTask):
         return []  # Self-determine from the list of pre-transforms provided
 
     def post_transforms(self, data=None) -> Sequence[Callable]:
-        if self.type == InferType.DEEPEDIT:
-            t = [
-                SplitPredsOtherd(keys="pred", other_name="resultfirst"),
-                EnsureTyped(keys="pred", device=data.get("device") if data else None),
-                Activationsd(keys="pred", softmax=True),
-                AsDiscreted(keys=("pred", "label"), argmax=(True, False), to_onehot=(2, 2)),  # label:(2, 128, 128, 48)
-                EnsureChannelFirstd(keys=("label", "pred")),  # pred:(1, 2, 128, 128, 48)  label:(1, 2, 128, 128, 48)
-                ToNumpyd(keys="pred"),
-                # writer前必须要使用restore
-                Restored(keys=["image", "label", "pred"], ref_image="image"),
-                WriteCrop(keys=["image", "label", "pred"],
-                          location_tag=["images_crop", "labels_crop_monai", "test_labels_monai"]),
-                SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(2, 128, 128, 48) label:(2, 128, 128, 48)
-                AsDiscreted(keys=("pred", "label"), argmax=True),  # pred:(1, 128, 128, 48) label:(1, 128, 128, 48)
-                SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(128, 128, 48) label:(128, 128, 48)
-                WriteCrop(keys=["label"], location_tag=["labels_crop"]),
-            ]
-        else:  # InferType.SEGMENTATION
-            t = [
-                EnsureTyped(keys="pred", device=data.get("device") if data else None),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
-                Activationsd(keys="pred", softmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
-                AsDiscreted(keys="pred", argmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (1, 128, 128, 48)
-                SqueezeDimd(keys="pred", dim=0),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (128, 128, 48)
-                ToNumpyd(keys="pred"),
-                Restored(keys="pred", ref_image="image"),
-            ]
+        if self.environment == "dev":
+            if self.type == InferType.DEEPEDIT:
+                t = [
+                    SplitPredsOtherd(keys="pred", other_name="resultfirst"),
+                    EnsureTyped(keys="pred", device=data.get("device") if data else None),
+                    Activationsd(keys="pred", softmax=True),
+                    AsDiscreted(keys=("pred", "label"), argmax=(True, False), to_onehot=(2, 2)),  # label:(2, 128, 128, 48)
+                    EnsureChannelFirstd(keys=("label", "pred")),  # pred:(1, 2, 128, 128, 48)  label:(1, 2, 128, 128, 48)
+                    ToNumpyd(keys="pred"),
+                    # writer前必须要使用restore
+                    Restored(keys=["image", "label", "pred"], ref_image="image"),
+                    WriteCrop(keys=["image", "label", "pred"],
+                              location_tag=["images_crop", "labels_crop_monai", "test_labels_monai"]),
+                    SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(2, 128, 128, 48) label:(2, 128, 128, 48)
+                    AsDiscreted(keys=("pred", "label"), argmax=True),  # pred:(1, 128, 128, 48) label:(1, 128, 128, 48)
+                    SqueezeDimd(keys=("pred", "label"), dim=0),  # pred:(128, 128, 48) label:(128, 128, 48)
+                    WriteCrop(keys=["label"], location_tag=["labels_crop"]),
+                ]
+            else:  # InferType.SEGMENTATION
+                t = [
+                    EnsureTyped(keys="pred", device=data.get("device") if data else None),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
+                    Activationsd(keys="pred", softmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (2, 128, 128, 48)
+                    AsDiscreted(keys="pred", argmax=True),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (1, 128, 128, 48)
+                    SqueezeDimd(keys="pred", dim=0),  # image: (3, 128, 128, 48) label: (1, 128, 128, 48) pred: (128, 128, 48)
+                    ToNumpyd(keys="pred"),
+                    Restored(keys="pred", ref_image="image"),
+                ]
+        elif self.environment == "prod":
+            if self.type == InferType.DEEPEDIT:
+                t = [
+                    CopyItemsd(keys="pred", times=1, names="logits"),
+                    Activationsd(keys="pred", softmax=True),
+                    AsDiscreted(keys="pred", argmax=True),
+                    ToNumpyd(keys=["pred", "logits"]),
+                    Restored(keys=["pred", "logits"], ref_image="image"),  # pred and logits(2, 128, 128, 48)
+                    BoundingBoxd(keys="pred", result="result", bbox="bbox"),
+                    WriteLogits(key="logits", result="result"),
+                ]
         return t
 
 

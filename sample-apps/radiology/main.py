@@ -25,11 +25,11 @@ import monailabel
 from monailabel.interfaces.app import MONAILabelApp
 from monailabel.interfaces.config import TaskConfig
 from monailabel.interfaces.datastore import Datastore
-from monailabel.interfaces.tasks.infer_v2 import InferTask
+from monailabel.interfaces.tasks.infer_v2 import InferTask, InferType
 from monailabel.interfaces.tasks.scoring import ScoringMethod
 from monailabel.interfaces.tasks.strategy import Strategy
 from monailabel.interfaces.tasks.train import TrainTask
-from monailabel.scribbles.infer import GMMBasedGraphCut, HistogramBasedGraphCut
+from monailabel.scribbles.infer import GMMBasedGraphCut, HistogramBasedGraphCut, BreastISegGraphCut
 from monailabel.tasks.activelearning.first import First
 from monailabel.tasks.activelearning.random import Random
 from monailabel.tasks.activelearning.search import Search
@@ -37,6 +37,11 @@ from monailabel.tasks.train.basic_train import Context
 from monailabel.utils.others.class_utils import get_class_names
 from monailabel.utils.others.generic import strtobool
 from monailabel.utils.others.planner import HeuristicPlanner
+
+import numpy as np
+import pandas as pd
+import radiomics.featureextractor as FEE
+import joblib
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +147,7 @@ class MyApp(MONAILabelApp):
                     num_mixtures=20,
                     labels=task_config.labels,
                 ),
+                "ISeg+GraphCut": BreastISegGraphCut(),
             }
         )
 
@@ -252,6 +258,112 @@ class MyApp(MONAILabelApp):
                     else:
                         train_datalist.append(file)
         return train_datalist, val_datalist
+
+    def infer(self, request, datastore=None):
+        image = request.get("image")
+
+        # add saved logits into request
+        if self._infers[request.get("model")].type == InferType.SCRIBBLES:
+            saved_labels = self.datastore().get_labels_by_image_id(image)
+            for tag, label in saved_labels.items():
+                if tag == "logits":
+                    request["logits"] = self.datastore(
+                    ).get_label_uri(label, tag)
+            logger.info(f"Updated request: {request}")
+
+        result = super().infer(request)
+        result_params = result.get("params")
+
+        # save logits
+        logits = result_params.get("logits")
+        if logits and self._infers[request.get("model")].type == InferType.DEEPEDIT:
+            self.datastore().save_label(image, logits, "logits", {})
+            os.unlink(logits)
+            # result['label'] = label_info['dest']
+            # result['file'] = label_info['dest'] # return file path to slicer
+        result_params.pop("logits", None)
+        logger.info(f"Final Result: {result}")
+        return result
+
+
+    def predict(self, request, datastore=None):
+        image_id = request["image"]
+        model_path = request["model_path"]
+        ori_dir = "Breast_Training_005"
+        final_feature = [
+            "original_shape_Elongation",
+            "original_shape_Flatness",
+            "original_shape_LeastAxisLength",
+            "original_shape_SurfaceVolumeRatio",
+            "original_firstorder_Maximum",
+            "original_firstorder_Range",
+            "original_firstorder_TotalEnergy",
+        ]
+        X_test, predict_result, predict_result_proda = self._predict(ori_dir, 'SVM', from_csv_file=False)
+        text_comment = []
+        for i in range(len(final_feature)):
+            t = str(final_feature[i]) + ":" + str(X_test[0][i])
+            text_comment.append(t)
+        if predict_result[0] == 0:
+            result = 'BENIGN'
+        else:
+            result = 'MALIGNANT'
+        result_json = {}
+        result_json["text_comment"] = text_comment
+        result_json["proda"] = predict_result_proda
+        return {"result": result, "params": result_json}
+
+    def _predict(self, ori_dir, model_name, save_csv_file=False, from_csv_file=False):
+        MODEL_TYPE = "ph3"
+        test_radiomics_path = './predict_model/case1/' + 'breast_input_test_' + MODEL_TYPE + '.csv'
+        params_file_path = './predict_model/case1/' + "Params.yml"
+        default_prefix = 'D:/Desktop/BREAST/BREAST/'
+        root_path = default_prefix + 'breast-dataset-training-validation/Breast_TrainingData'
+        # 保存模型的地址
+        train_model_path = "./predict_model/case1/model/train_model_" + MODEL_TYPE
+        std_path = "./predict_model/case1/model/std_" + MODEL_TYPE + ".m"
+        selector_path = "./predict_model/case1/model/selector_" + MODEL_TYPE + ".m"
+        selector_rf_path = "./predict_model/case1/model/feature_" + MODEL_TYPE + ".m"
+        if from_csv_file:
+            data = pd.read_csv(test_radiomics_path)
+        else:
+            # 获取特征 使用配置文件初始化特征抽取器
+            extractor = FEE.RadiomicsFeatureExtractor(params_file_path)
+            if MODEL_TYPE == "t2":
+                image_path = os.path.join(root_path, ori_dir, ori_dir + "_" + MODEL_TYPE + "_sitk.nii")
+            else:
+                image_path = os.path.join(root_path, ori_dir, ori_dir + "_" + MODEL_TYPE + ".nii")
+            seg_path = os.path.join(root_path, ori_dir, ori_dir + "_seg.nii")
+            result = extractor.execute(image_path, seg_path)
+            if save_csv_file:
+                save_df = pd.DataFrame([result])
+                save_df.to_csv(test_radiomics_path, index=None, header=None)
+            # 从字典创建DataFrame
+            data = pd.DataFrame([result])
+        data = data.iloc[:, 22:]
+        X = np.array(data[data.columns], dtype=float)
+        # 查看一下x的维度
+        print('X.shape', X.shape)
+        # 对特征数据进行标准化处理
+        sc = joblib.load(std_path)
+        X_std = sc.transform(X)
+        print('X_std.shape', X_std.shape)
+        print(X_std)
+        # 单变量分析
+        selector = joblib.load(selector_path)
+        X_new = selector.transform(X_std)
+        print('X_new.shape after f_classif', X_new.shape)
+        # 随机森林多变量分析
+        feature = joblib.load(selector_rf_path)
+        X_fit = feature.transform(X_new)
+        print('X_fit.shape after RF', X_fit.shape)
+        # 开始预测 模型从本地调回
+        svm = joblib.load(train_model_path + "_" + model_name + '.m')
+        predict_result = svm.predict(X_fit)
+        predict_result_proda = svm.predict_proba(X_fit)
+        print('predict_result:', predict_result)
+        print('predict_result_proda:', predict_result_proda)
+        return X_fit, predict_result, predict_result_proda
 
 """
 Example to run train/infer/scoring task(s) locally without actually running MONAI Label Server

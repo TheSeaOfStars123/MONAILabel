@@ -174,7 +174,27 @@ class DeepEdit(TaskConfig):
 
     def infer(self) -> Union[InferTask, Dict[str, InferTask]]:
         return {
-            self.name: lib.infers.DeepEdit(
+            # self.name: lib.infers.DeepEdit(
+            #     path=self.path,
+            #     network=self.network,
+            #     labels=self.labels,
+            #     preload=strtobool(self.conf.get("preload", "false")),
+            #     spatial_size=self.spatial_size,
+            #     number_intensity_ch=self.number_intensity_ch,
+            #     config={"cache_transforms": True, "cache_transforms_in_memory": True, "cache_transforms_ttl": 300},
+            #     environment="dev"
+            # ),
+            # f"{self.name}_seg": lib.infers.DeepEdit(
+            #     path=self.path,
+            #     network=self.network,
+            #     labels=self.labels,
+            #     preload=strtobool(self.conf.get("preload", "false")),
+            #     spatial_size=self.spatial_size,
+            #     number_intensity_ch=self.number_intensity_ch,
+            #     type=InferType.SEGMENTATION,
+            #     environment="dev"
+            # ),
+            f"{self.name}_prod": lib.infers.DeepEdit(
                 path=self.path,
                 network=self.network,
                 labels=self.labels,
@@ -182,15 +202,7 @@ class DeepEdit(TaskConfig):
                 spatial_size=self.spatial_size,
                 number_intensity_ch=self.number_intensity_ch,
                 config={"cache_transforms": True, "cache_transforms_in_memory": True, "cache_transforms_ttl": 300},
-            ),
-            f"{self.name}_seg": lib.infers.DeepEdit(
-                path=self.path,
-                network=self.network,
-                labels=self.labels,
-                preload=strtobool(self.conf.get("preload", "false")),
-                spatial_size=self.spatial_size,
-                number_intensity_ch=self.number_intensity_ch,
-                type=InferType.SEGMENTATION,
+                environment="prod"
             ),
         }
 

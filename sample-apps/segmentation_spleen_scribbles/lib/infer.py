@@ -120,7 +120,7 @@ class SegmentationBreastWithWriteLogits(BasicInferTask):
             Activationsd(keys="pred", softmax=True),
             AsDiscreted(keys="pred", argmax=True),
             ToNumpyd(keys=["pred", "logits"]),
-            Restored(keys=["pred", "logits"], ref_image="image"), # pred and logits(2, 128, 128, 48)
+            Restored(keys=["pred", "logits"], ref_image="image"),  # pred and logits(2, 128, 128, 48)
             BoundingBoxd(keys="pred", result="result", bbox="bbox"),
             WriteLogits(key="logits", result="result"),
         ]
