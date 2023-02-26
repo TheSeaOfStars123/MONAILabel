@@ -94,26 +94,35 @@ class DeepEdit(BasicInferTask):
                 EnsureChannelFirstd(keys=("image")),
                 # Orientationd(keys="image", axcodes="RAS"),
                 ScaleIntensityd(keys="image"),
-                SpatialCropByRoiD(keys=["image"]),
                 # ScaleIntensityRanged(keys="image", a_min=-175, a_max=250, b_min=0.0, b_max=1.0, clip=True),
             ]
-        return t
 
         self.add_cache_transform(t, data)
 
         if self.type == InferType.DEEPEDIT:
-            t.extend(
-                [
-                    # LoadGuidanceFromJsonFiled(guidance=("firstpoint_guidances", "label_guidances", "random_guidances"), file_path="/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json"),
-                    AddGeodisTKSignald(keys="image", guidance="firstpoint", lamb=0.05, iter=4, number_intensity_ch=1),
-                    AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
-                    # Resized(keys="image", spatial_size=self.spatial_size, mode="area"),
-                    # ResizeGuidanceMultipleLabelDeepEditd(guidance="guidance", ref_image="image"),
-                    AddGuidanceSignalDeepEditd(
-                        keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch
-                    ),
-                ]
-            )
+            if self.environment == "dev":
+                t.extend(
+                    [
+                        # LoadGuidanceFromJsonFiled(guidance=("firstpoint_guidances", "label_guidances", "random_guidances"), file_path="/Users/zyc/Desktop/DESKTOP/MONAILabel0.4/sample-apps/radiology/aaa.json"),
+                        AddGeodisTKSignald(keys="image", guidance="firstpoint", lamb=0.05, iter=4, number_intensity_ch=1),
+                        AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
+                        # Resized(keys="image", spatial_size=self.spatial_size, mode="area"),
+                        # ResizeGuidanceMultipleLabelDeepEditd(guidance="guidance", ref_image="image"),
+                        AddGuidanceSignalDeepEditd(
+                            keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch
+                        ),
+                    ]
+                )
+            elif self.environment == "prod":
+                t.extend(
+                    [
+                        AddGuidanceFromPointsDeepEditd(ref_image="image", guidance="guidance", label_names=self.labels),
+                        AddGuidanceSignalDeepEditd(
+                            keys="image", guidance="guidance", number_intensity_ch=self.number_intensity_ch
+                        ),
+                        SpatialCropByRoiD(keys=["image"], guidance="guidance"),
+                    ]
+                )
         else:
             t.extend(
                 [

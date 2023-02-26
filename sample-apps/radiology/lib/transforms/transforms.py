@@ -558,13 +558,21 @@ class CacheObjectd(MapTransform):
         return d
 
 class SpatialCropByRoiD(MapTransform):
-    def __init__(self, keys: KeysCollection):
+    def __init__(self,
+                 keys: KeysCollection,
+                 guidance: str = "guidance",
+                ):
         super().__init__(keys)
+        self.guidance = guidance
 
     def __call__(self, data):
         d = dict(data)
-        ORI_SHAPE = d["label"].squeeze().shape
-        CM = list(map(int, ndimage.measurements.center_of_mass(d['label'].squeeze())))
+        ORI_SHAPE = d["image"].squeeze().shape
+        if self.guidance in d:
+            CM = d[self.guidance]['mass'][0]
+        else:
+            CM = list(map(int, ndimage.measurements.center_of_mass(d['label'].squeeze())))
+
         # 定义偏移量
         offsetX = 64
         offsetY = 64
@@ -592,7 +600,8 @@ class SpatialCropByRoiD(MapTransform):
             img = d[key]
             crop = SpatialCrop(roi_center=CM, roi_size=(128, 128, 48))
             d[key] = crop(img)
-            logger.info("Processing label: " + d["label_meta_dict"]["filename_or_obj"] + "->" + str(d["label"].shape))
+            if "label_meta_dict" in d:
+                logger.info("Processing label: " + d["label_meta_dict"]["filename_or_obj"] + "->" + str(d["label"].shape))
         return d
 
 class WriteCrop(MapTransform):
